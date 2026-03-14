@@ -98,7 +98,12 @@ export default function LoginPage() {
       if (data.user) {
         if (data.user.identities?.length === 0) {
           setError("Bu email allaqachon ro'yxatdan o'tgan")
+        } else if (data.session) {
+          // Email tasdiqlanishi o'chirilgan - avtomatik kirish
+          router.push("/")
+          router.refresh()
         } else {
+          // Email tasdiqlanishi yoqilgan
           setSuccess("Ro'yxatdan o'tdingiz! Emailingizni tasdiqlang yoki tizimga kiring.")
           setIsRegister(false)
           setPassword("")
