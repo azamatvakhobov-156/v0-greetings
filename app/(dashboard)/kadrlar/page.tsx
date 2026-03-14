@@ -68,7 +68,21 @@ interface Staff {
   phone: string | null
   status: string
   hire_date: string | null
+  staff_type: "technical" | "pedagogue" | "management"
+  subject_id: string | null
   departments?: { name: string } | null
+  subjects?: { name: string } | null
+}
+
+interface Subject {
+  id: string
+  name: string
+}
+
+const staffTypeLabels: Record<string, string> = {
+  technical: "Texnik xodim",
+  pedagogue: "Pedagog",
+  management: "Rahbariyat"
 }
 
 interface Department {
@@ -165,7 +179,10 @@ export default function KadrlarPage() {
     department_id: "",
     phone: "",
     hire_date: "",
+    staff_type: "technical" as "technical" | "pedagogue" | "management",
+    subject_id: "",
   })
+  const [subjects, setSubjects] = useState<Subject[]>([])
 
   // Task modal states
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
@@ -199,16 +216,24 @@ export default function KadrlarPage() {
 
   const fetchData = async () => {
     setIsLoading(true)
-    await Promise.all([fetchStaff(), fetchDepartments(), fetchTasks()])
+    await Promise.all([fetchStaff(), fetchDepartments(), fetchTasks(), fetchSubjects()])
     setIsLoading(false)
   }
 
   const fetchStaff = async () => {
     const { data } = await supabase
       .from("staff")
-      .select("*, departments(name)")
+      .select("*, departments(name), subjects(name)")
       .order("full_name")
     if (data) setStaff(data)
+  }
+
+  const fetchSubjects = async () => {
+    const { data } = await supabase
+      .from("subjects")
+      .select("*")
+      .order("name")
+    if (data) setSubjects(data)
   }
 
   const fetchDepartments = async () => {
@@ -249,30 +274,28 @@ export default function KadrlarPage() {
   const handleSaveStaff = async () => {
     if (!staffForm.full_name || !staffForm.position) return
 
+    const staffData = {
+      full_name: staffForm.full_name,
+      position: staffForm.position,
+      department_id: staffForm.department_id || null,
+      phone: staffForm.phone || null,
+      hire_date: staffForm.hire_date || null,
+      staff_type: staffForm.staff_type,
+      subject_id: staffForm.staff_type === "pedagogue" ? (staffForm.subject_id || null) : null,
+    }
+
     if (editingStaff) {
       await supabase
         .from("staff")
-        .update({
-          full_name: staffForm.full_name,
-          position: staffForm.position,
-          department_id: staffForm.department_id || null,
-          phone: staffForm.phone || null,
-          hire_date: staffForm.hire_date || null,
-        })
+        .update(staffData)
         .eq("id", editingStaff.id)
     } else {
-      await supabase.from("staff").insert({
-        full_name: staffForm.full_name,
-        position: staffForm.position,
-        department_id: staffForm.department_id || null,
-        phone: staffForm.phone || null,
-        hire_date: staffForm.hire_date || null,
-      })
+      await supabase.from("staff").insert(staffData)
     }
 
     setIsStaffModalOpen(false)
     setEditingStaff(null)
-    setStaffForm({ full_name: "", position: "", department_id: "", phone: "", hire_date: "" })
+    setStaffForm({ full_name: "", position: "", department_id: "", phone: "", hire_date: "", staff_type: "technical", subject_id: "" })
     fetchStaff()
   }
 
@@ -284,6 +307,8 @@ export default function KadrlarPage() {
       department_id: staffMember.department_id || "",
       phone: staffMember.phone || "",
       hire_date: staffMember.hire_date || "",
+      staff_type: staffMember.staff_type || "technical",
+      subject_id: staffMember.subject_id || "",
     })
     setIsStaffModalOpen(true)
   }
@@ -653,7 +678,7 @@ export default function KadrlarPage() {
                     <DialogTrigger asChild>
                       <Button onClick={() => {
                         setEditingStaff(null)
-                        setStaffForm({ full_name: "", position: "", department_id: "", phone: "", hire_date: "" })
+                        setStaffForm({ full_name: "", position: "", department_id: "", phone: "", hire_date: "", staff_type: "technical", subject_id: "" })
                       }}>
                         <Plus className="h-4 w-4 mr-2" />
                         Xodim qo'shish
@@ -666,6 +691,46 @@ export default function KadrlarPage() {
                         </DialogTitle>
                       </DialogHeader>
                       <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label>Xodim turi</Label>
+                          <Select
+                            value={staffForm.staff_type}
+                            onValueChange={(value: "technical" | "pedagogue" | "management") => 
+                              setStaffForm({ ...staffForm, staff_type: value, subject_id: value !== "pedagogue" ? "" : staffForm.subject_id })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="technical">Texnik xodim</SelectItem>
+                              <SelectItem value="pedagogue">Pedagog</SelectItem>
+                              <SelectItem value="management">Rahbariyat</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        {staffForm.staff_type === "pedagogue" && (
+                          <div className="space-y-2">
+                            <Label>Fan</Label>
+                            <Select
+                              value={staffForm.subject_id}
+                              onValueChange={(value) => setStaffForm({ ...staffForm, subject_id: value })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Fanni tanlang" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {subjects.map((subj) => (
+                                  <SelectItem key={subj.id} value={subj.id}>
+                                    {subj.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        
                         <div className="space-y-2">
                           <Label>F.I.O.</Label>
                           <Input
