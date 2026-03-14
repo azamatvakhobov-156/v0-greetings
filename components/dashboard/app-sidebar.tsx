@@ -89,7 +89,7 @@ export function AppSidebar() {
           </div>
           <div className="flex flex-col">
             <span className="text-base font-semibold text-sidebar-foreground">
-              Maktab BT
+              156-maktab
             </span>
             <span className="text-xs text-muted-foreground">
               Boshqaruv tizimi

@@ -38,7 +38,7 @@ export default function LoginPage() {
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary mb-4">
             <GraduationCap className="h-9 w-9 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">Maktab BT</h1>
+          <h1 className="text-2xl font-bold text-foreground">156-maktab</h1>
           <p className="text-muted-foreground text-sm mt-1">
             AI asosida maktab boshqaruv tizimi
           </p>

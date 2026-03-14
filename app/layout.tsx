@@ -7,7 +7,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Maktab BT - AI Asosida Boshqaruv Tizimi',
+  title: '156-maktab - AI Asosida Boshqaruv Tizimi',
   description: 'Maktabni boshqarish uchun zamonaviy AI tahlillarga asoslangan platforma',
   generator: 'v0.app',
   icons: {
