@@ -177,6 +177,8 @@ export default function KadrlarPage() {
     priority: "medium" as const,
     due_date: "",
   })
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [uploadingNewTask, setUploadingNewTask] = useState(false)
 
   // Task detail modal
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
@@ -294,34 +296,92 @@ export default function KadrlarPage() {
   // Task CRUD
   const handleSaveTask = async () => {
     if (!taskForm.title) return
+    setUploadingNewTask(true)
 
-    if (editingTask) {
-      await supabase
-        .from("tasks")
-        .update({
+    try {
+      if (editingTask) {
+        await supabase
+          .from("tasks")
+          .update({
+            title: taskForm.title,
+            description: taskForm.description || null,
+            assigned_to: taskForm.assigned_to || null,
+            priority: taskForm.priority,
+            due_date: taskForm.due_date || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", editingTask.id)
+        
+        // Upload pending files for edited task
+        if (pendingFiles.length > 0) {
+          for (const file of pendingFiles) {
+            const formData = new FormData()
+            formData.append('file', file)
+            
+            const response = await fetch('/api/upload', {
+              method: 'POST',
+              body: formData,
+            })
+            
+            if (response.ok) {
+              const data = await response.json()
+              await supabase.from("task_attachments").insert({
+                task_id: editingTask.id,
+                file_name: data.fileName,
+                file_url: data.url,
+                file_type: data.fileType,
+                file_size: data.fileSize,
+                uploaded_by: currentUser?.id || null,
+              })
+            }
+          }
+        }
+      } else {
+        const { data: newTask } = await supabase.from("tasks").insert({
           title: taskForm.title,
           description: taskForm.description || null,
           assigned_to: taskForm.assigned_to || null,
+          assigned_by: currentUser?.id || null,
           priority: taskForm.priority,
           due_date: taskForm.due_date || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", editingTask.id)
-    } else {
-      await supabase.from("tasks").insert({
-        title: taskForm.title,
-        description: taskForm.description || null,
-        assigned_to: taskForm.assigned_to || null,
-        assigned_by: currentUser?.id || null,
-        priority: taskForm.priority,
-        due_date: taskForm.due_date || null,
-      })
-    }
+        }).select().single()
+        
+        // Upload pending files for new task
+        if (newTask && pendingFiles.length > 0) {
+          for (const file of pendingFiles) {
+            const formData = new FormData()
+            formData.append('file', file)
+            
+            const response = await fetch('/api/upload', {
+              method: 'POST',
+              body: formData,
+            })
+            
+            if (response.ok) {
+              const data = await response.json()
+              await supabase.from("task_attachments").insert({
+                task_id: newTask.id,
+                file_name: data.fileName,
+                file_url: data.url,
+                file_type: data.fileType,
+                file_size: data.fileSize,
+                uploaded_by: currentUser?.id || null,
+              })
+            }
+          }
+        }
+      }
 
-    setIsTaskModalOpen(false)
-    setEditingTask(null)
-    setTaskForm({ title: "", description: "", assigned_to: "", priority: "medium", due_date: "" })
-    fetchTasks()
+      setIsTaskModalOpen(false)
+      setEditingTask(null)
+      setTaskForm({ title: "", description: "", assigned_to: "", priority: "medium", due_date: "" })
+      setPendingFiles([])
+      fetchTasks()
+    } catch (error) {
+      console.error('Error saving task:', error)
+    } finally {
+      setUploadingNewTask(false)
+    }
   }
 
   const handleEditTask = (task: Task) => {
@@ -333,8 +393,22 @@ export default function KadrlarPage() {
       priority: task.priority,
       due_date: task.due_date || "",
     })
+    setPendingFiles([])
     setIsTaskModalOpen(true)
     setSelectedTask(null)
+  }
+
+  // Add files to pending list for new task
+  const handleAddPendingFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return
+    const newFiles = Array.from(e.target.files)
+    setPendingFiles([...pendingFiles, ...newFiles])
+    e.target.value = ""
+  }
+
+  // Remove file from pending list
+  const handleRemovePendingFile = (index: number) => {
+    setPendingFiles(pendingFiles.filter((_, i) => i !== index))
   }
 
   const handleDeleteTask = async (id: string) => {
@@ -377,25 +451,49 @@ export default function KadrlarPage() {
     fetchTaskDetails(selectedTask.id)
   }
 
-  // File upload
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || !selectedTask) return
+  // File upload for existing task
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, taskId?: string) => {
+    const targetTaskId = taskId || selectedTask?.id
+    if (!e.target.files || !targetTaskId) return
     setIsUploading(true)
 
     const file = e.target.files[0]
-    const fakeUrl = `https://storage.example.com/files/${Date.now()}_${file.name}`
+    
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        console.error('Upload error:', error)
+        setIsUploading(false)
+        return
+      }
+      
+      const data = await response.json()
+      
+      await supabase.from("task_attachments").insert({
+        task_id: targetTaskId,
+        file_name: data.fileName,
+        file_url: data.url,
+        file_type: data.fileType,
+        file_size: data.fileSize,
+        uploaded_by: currentUser?.id || null,
+      })
 
-    await supabase.from("task_attachments").insert({
-      task_id: selectedTask.id,
-      file_name: file.name,
-      file_url: fakeUrl,
-      file_type: file.type,
-      file_size: file.size,
-      uploaded_by: currentUser?.id || null,
-    })
-
+      if (selectedTask) {
+        fetchTaskDetails(selectedTask.id)
+      }
+    } catch (error) {
+      console.error('Upload failed:', error)
+    }
+    
     setIsUploading(false)
-    fetchTaskDetails(selectedTask.id)
     e.target.value = ""
   }
 
@@ -728,11 +826,17 @@ export default function KadrlarPage() {
                       <SelectItem value="cancelled">Bekor qilindi</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Dialog open={isTaskModalOpen} onOpenChange={setIsTaskModalOpen}>
+                  <Dialog open={isTaskModalOpen} onOpenChange={(open) => {
+                    setIsTaskModalOpen(open)
+                    if (!open) {
+                      setPendingFiles([])
+                    }
+                  }}>
                     <DialogTrigger asChild>
                       <Button onClick={() => {
                         setEditingTask(null)
                         setTaskForm({ title: "", description: "", assigned_to: "", priority: "medium", due_date: "" })
+                        setPendingFiles([])
                       }}>
                         <Plus className="h-4 w-4 mr-2" />
                         Topshiriq berish
@@ -809,12 +913,71 @@ export default function KadrlarPage() {
                             />
                           </div>
                         </div>
+                        
+                        {/* Fayl ilova qilish */}
+                        <div className="space-y-2">
+                          <Label>Ilovalar</Label>
+                          <div className="border border-dashed border-border rounded-lg p-4">
+                            <input
+                              type="file"
+                              id="task-file-input"
+                              className="hidden"
+                              onChange={handleAddPendingFile}
+                              multiple
+                            />
+                            <label
+                              htmlFor="task-file-input"
+                              className="flex flex-col items-center justify-center gap-2 cursor-pointer text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <Upload className="h-8 w-8" />
+                              <span className="text-sm">Fayl yuklash uchun bosing</span>
+                              <span className="text-xs">Maksimum 10MB</span>
+                            </label>
+                          </div>
+                          
+                          {/* Pending files list */}
+                          {pendingFiles.length > 0 && (
+                            <div className="space-y-2 mt-3">
+                              {pendingFiles.map((file, index) => (
+                                <div
+                                  key={index}
+                                  className="flex items-center justify-between p-2 rounded-md bg-secondary/50"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {getFileIcon(file.type)}
+                                    <span className="text-sm truncate max-w-[200px]">{file.name}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      ({formatFileSize(file.size)})
+                                    </span>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={() => handleRemovePendingFile(index)}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                       <DialogFooter>
                         <DialogClose asChild>
                           <Button variant="outline">Bekor qilish</Button>
                         </DialogClose>
-                        <Button onClick={handleSaveTask}>Saqlash</Button>
+                        <Button onClick={handleSaveTask} disabled={uploadingNewTask}>
+                          {uploadingNewTask ? (
+                            <>
+                              <span className="animate-spin mr-2">
+                                <Upload className="h-4 w-4" />
+                              </span>
+                              Yuklanmoqda...
+                            </>
+                          ) : "Saqlash"}
+                        </Button>
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
