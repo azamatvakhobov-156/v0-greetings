@@ -1,7 +1,8 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard,
   CalendarCheck,
@@ -13,6 +14,7 @@ import {
   Settings,
   LogOut,
   GraduationCap,
+  UserCog,
 } from "lucide-react"
 
 import {
@@ -29,7 +31,15 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { currentUser } from "@/lib/mock-data"
+
+interface UserData {
+  id: string
+  username: string
+  full_name: string
+  role: "admin" | "director" | "teacher"
+  phone?: string
+  avatar_url?: string
+}
 
 const mainNavItems = [
   {
@@ -71,14 +81,46 @@ const mainNavItems = [
 
 const settingsNavItems = [
   {
+    title: "Foydalanuvchilar",
+    url: "/foydalanuvchilar",
+    icon: UserCog,
+    adminOnly: true,
+  },
+  {
     title: "Sozlamalar",
     url: "/sozlamalar",
     icon: Settings,
   },
 ]
 
+const roleLabels: Record<string, string> = {
+  admin: "Administrator",
+  director: "Direktor",
+  teacher: "O'qituvchi"
+}
+
 export function AppSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+  const [user, setUser] = useState<UserData | null>(null)
+
+  useEffect(() => {
+    const userStr = localStorage.getItem("user")
+    if (userStr) {
+      setUser(JSON.parse(userStr))
+    }
+  }, [])
+
+  const handleLogout = () => {
+    localStorage.removeItem("user")
+    router.push("/login")
+  }
+
+  // Filter settings items based on user role
+  const filteredSettingsItems = settingsNavItems.filter(item => {
+    if (item.adminOnly && user?.role !== "admin") return false
+    return true
+  })
 
   return (
     <Sidebar className="border-r border-sidebar-border">
@@ -136,7 +178,7 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {settingsNavItems.map((item) => {
+              {filteredSettingsItems.map((item) => {
                 const isActive = pathname === item.url
                 return (
                   <SidebarMenuItem key={item.url}>
@@ -164,27 +206,27 @@ export function AppSidebar() {
           <div className="flex items-center gap-3">
             <Avatar className="h-9 w-9">
               <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                {currentUser.fullName
-                  .split(" ")
+                {user?.full_name
+                  ?.split(" ")
                   .map((n) => n[0])
-                  .join("")}
+                  .join("") || "?"}
               </AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
               <span className="text-sm font-medium text-sidebar-foreground">
-                {currentUser.fullName}
+                {user?.full_name || "Foydalanuvchi"}
               </span>
-              <span className="text-xs text-muted-foreground capitalize">
-                {currentUser.role === "director" ? "Direktor" : currentUser.role}
+              <span className="text-xs text-muted-foreground">
+                {user?.role ? roleLabels[user.role] : ""}
               </span>
             </div>
           </div>
-          <Link
-            href="/login"
+          <button
+            onClick={handleLogout}
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
           >
             <LogOut className="h-4 w-4" />
-          </Link>
+          </button>
         </div>
       </SidebarFooter>
     </Sidebar>
