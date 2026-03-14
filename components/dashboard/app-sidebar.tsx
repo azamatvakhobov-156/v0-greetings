@@ -34,37 +34,37 @@ import { currentUser } from "@/lib/mock-data"
 const mainNavItems = [
   {
     title: "Bosh sahifa",
-    url: "/dashboard",
+    url: "/",
     icon: LayoutDashboard,
   },
   {
     title: "Davomat",
-    url: "/dashboard/davomat",
+    url: "/davomat",
     icon: CalendarCheck,
   },
   {
     title: "Dars jadvali",
-    url: "/dashboard/dars-jadvali",
+    url: "/dars-jadvali",
     icon: CalendarDays,
   },
   {
     title: "O'quv bo'limi",
-    url: "/dashboard/oquv-bolimi",
+    url: "/oquv-bolimi",
     icon: BookOpen,
   },
   {
     title: "Ma'naviyat bo'limi",
-    url: "/dashboard/manaviyat",
+    url: "/manaviyat",
     icon: Heart,
   },
   {
     title: "Kadrlar bo'limi",
-    url: "/dashboard/kadrlar",
+    url: "/kadrlar",
     icon: Users,
   },
   {
     title: "Summativ baholash",
-    url: "/dashboard/summativ-baholash",
+    url: "/summativ-baholash",
     icon: FileText,
   },
 ]
@@ -72,7 +72,7 @@ const mainNavItems = [
 const settingsNavItems = [
   {
     title: "Sozlamalar",
-    url: "/dashboard/sozlamalar",
+    url: "/sozlamalar",
     icon: Settings,
   },
 ]
@@ -83,7 +83,7 @@ export function AppSidebar() {
   return (
     <Sidebar className="border-r border-sidebar-border">
       <SidebarHeader className="p-4">
-        <Link href="/dashboard" className="flex items-center gap-3">
+        <Link href="/" className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
             <GraduationCap className="h-6 w-6 text-primary-foreground" />
           </div>
@@ -180,7 +180,7 @@ export function AppSidebar() {
             </div>
           </div>
           <Link
-            href="/"
+            href="/login"
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
           >
             <LogOut className="h-4 w-4" />

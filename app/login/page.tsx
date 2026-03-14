@@ -142,7 +142,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground mt-6">
-          © 2024 Maktab Boshqaruv Tizimi. Barcha huquqlar himoyalangan.
+          © 2026 156-maktab Boshqaruv Tizimi. Barcha huquqlar himoyalangan.
         </p>
       </div>
     </div>
