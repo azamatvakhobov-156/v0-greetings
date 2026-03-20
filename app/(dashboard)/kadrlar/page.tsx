@@ -774,10 +774,16 @@ export default function KadrlarPage() {
                         </div>
                       </div>
                       <DialogFooter>
-                        <DialogClose asChild>
-                          <Button variant="outline">Bekor qilish</Button>
-                        </DialogClose>
-                        <Button onClick={handleSaveStaff}>Saqlash</Button>
+                        <Button variant="outline" onClick={() => setIsStaffModalOpen(false)}>Bekor qilish</Button>
+                        <Button 
+                          onClick={() => {
+                            console.log("[v0] Save button clicked")
+                            handleSaveStaff()
+                          }}
+                          disabled={!staffForm.full_name || !staffForm.position}
+                        >
+                          Saqlash
+                        </Button>
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
