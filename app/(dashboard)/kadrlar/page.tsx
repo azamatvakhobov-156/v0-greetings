@@ -222,12 +222,15 @@ export default function KadrlarPage() {
   }
 
   const fetchStaff = async () => {
-    const { data, error } = await supabase
-      .from("staff")
-      .select("*, departments(name), subjects(name)")
-      .order("full_name")
-    console.log("[v0] fetchStaff result:", { data, error, count: data?.length })
-    if (data) setStaff(data)
+    try {
+      const response = await fetch("/api/staff")
+      const data = await response.json()
+      if (Array.isArray(data)) {
+        setStaff(data)
+      }
+    } catch (error) {
+      console.error("Error fetching staff:", error)
+    }
   }
 
   const fetchSubjects = async () => {
@@ -286,13 +289,22 @@ export default function KadrlarPage() {
       subject_id: staffForm.staff_type === "pedagogue" ? (staffForm.subject_id || null) : null,
     }
 
-    if (editingStaff) {
-      await supabase
-        .from("staff")
-        .update(staffData)
-        .eq("id", editingStaff.id)
-    } else {
-      await supabase.from("staff").insert(staffData)
+    try {
+      if (editingStaff) {
+        await fetch("/api/staff", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: editingStaff.id, ...staffData })
+        })
+      } else {
+        await fetch("/api/staff", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(staffData)
+        })
+      }
+    } catch (error) {
+      console.error("Error saving staff:", error)
     }
 
     setIsStaffModalOpen(false)
@@ -316,8 +328,12 @@ export default function KadrlarPage() {
   }
 
   const handleDeleteStaff = async (id: string) => {
-    await supabase.from("staff").delete().eq("id", id)
-    await fetchStaff()
+    try {
+      await fetch(`/api/staff?id=${id}`, { method: "DELETE" })
+      await fetchStaff()
+    } catch (error) {
+      console.error("Error deleting staff:", error)
+    }
   }
 
   // Task CRUD
