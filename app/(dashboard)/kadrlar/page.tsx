@@ -749,24 +749,6 @@ export default function KadrlarPage() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Bo'lim</Label>
-                          <Select
-                            value={staffForm.department_id}
-                            onValueChange={(value) => setStaffForm({ ...staffForm, department_id: value })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Bo'limni tanlang" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {departments.map((dept) => (
-                                <SelectItem key={dept.id} value={dept.id}>
-                                  {dept.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
                           <Label>Telefon</Label>
                           <Input
                             value={staffForm.phone}
