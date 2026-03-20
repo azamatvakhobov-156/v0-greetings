@@ -273,11 +273,7 @@ export default function KadrlarPage() {
 
   // Staff CRUD
   const handleSaveStaff = async () => {
-    console.log("[v0] handleSaveStaff called", staffForm)
-    if (!staffForm.full_name || !staffForm.position) {
-      console.log("[v0] Validation failed - missing full_name or position")
-      return
-    }
+    if (!staffForm.full_name || !staffForm.position) return
 
     const staffData = {
       full_name: staffForm.full_name,
@@ -289,23 +285,19 @@ export default function KadrlarPage() {
       subject_id: staffForm.staff_type === "pedagogue" ? (staffForm.subject_id || null) : null,
     }
 
-    console.log("[v0] Saving staff data:", staffData)
-
     if (editingStaff) {
-      const { error } = await supabase
+      await supabase
         .from("staff")
         .update(staffData)
         .eq("id", editingStaff.id)
-      console.log("[v0] Update result:", error ? error : "success")
     } else {
-      const { error } = await supabase.from("staff").insert(staffData)
-      console.log("[v0] Insert result:", error ? error : "success")
+      await supabase.from("staff").insert(staffData)
     }
 
     setIsStaffModalOpen(false)
     setEditingStaff(null)
     setStaffForm({ full_name: "", position: "", department_id: "", phone: "", hire_date: "", staff_type: "technical", subject_id: "" })
-    fetchStaff()
+    await fetchStaff()
   }
 
   const handleEditStaff = (staffMember: Staff) => {
@@ -324,7 +316,7 @@ export default function KadrlarPage() {
 
   const handleDeleteStaff = async (id: string) => {
     await supabase.from("staff").delete().eq("id", id)
-    fetchStaff()
+    await fetchStaff()
   }
 
   // Task CRUD
@@ -684,7 +676,6 @@ export default function KadrlarPage() {
                     </SelectContent>
                   </Select>
                   <Button onClick={() => {
-                      console.log("[v0] Add staff button clicked")
                       setEditingStaff(null)
                       setStaffForm({ full_name: "", position: "", department_id: "", phone: "", hire_date: "", staff_type: "technical", subject_id: "" })
                       setIsStaffModalOpen(true)
@@ -744,10 +735,7 @@ export default function KadrlarPage() {
                           <Label>F.I.O.</Label>
                           <Input
                             value={staffForm.full_name}
-                            onChange={(e) => {
-                              console.log("[v0] full_name changed:", e.target.value)
-                              setStaffForm({ ...staffForm, full_name: e.target.value })
-                            }}
+                            onChange={(e) => setStaffForm({ ...staffForm, full_name: e.target.value })}
                             placeholder="To'liq ism"
                           />
                         </div>
@@ -755,10 +743,7 @@ export default function KadrlarPage() {
                           <Label>Lavozim</Label>
                           <Input
                             value={staffForm.position}
-                            onChange={(e) => {
-                              console.log("[v0] position changed:", e.target.value)
-                              setStaffForm({ ...staffForm, position: e.target.value })
-                            }}
+                            onChange={(e) => setStaffForm({ ...staffForm, position: e.target.value })}
                             placeholder="Lavozim"
                           />
                         </div>
@@ -782,13 +767,10 @@ export default function KadrlarPage() {
                       <DialogFooter>
                         <Button variant="outline" onClick={() => setIsStaffModalOpen(false)}>Bekor qilish</Button>
                         <Button 
-                          onClick={() => {
-                            console.log("[v0] Save button clicked, form:", staffForm)
-                            handleSaveStaff()
-                          }}
+                          onClick={handleSaveStaff}
                           disabled={!staffForm.full_name || !staffForm.position}
                         >
-                          Saqlash {!staffForm.full_name || !staffForm.position ? "(to'ldiring)" : ""}
+                          Saqlash
                         </Button>
                       </DialogFooter>
                     </DialogContent>
