@@ -34,6 +34,17 @@ import { format } from "date-fns"
 import { uz } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { getStaffRole, getStaffPermissions, type StaffRole, type StaffPermissions } from "@/lib/permissions"
 import {
   ArrowLeft,
   Phone,
@@ -57,6 +68,17 @@ import {
   Trash2,
   Calculator,
   BookOpen,
+  BarChart3,
+  Target,
+  UserPlus,
+  UserMinus,
+  Settings,
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  Eye,
+  Edit,
+  Brain,
 } from "lucide-react"
 
 interface Staff {
@@ -127,6 +149,60 @@ interface AssessmentTask {
 interface StudentScore {
   studentId: string
   scores: Record<string, number> // taskId -> score
+}
+
+interface GradeResult {
+  id: string
+  student_id: string
+  subject_id: string
+  score: number
+  max_score: number
+  quarter: number
+  grade_type: string
+  students?: { full_name: string, class_id: string } | null
+  subjects?: { name: string } | null
+}
+
+interface MonitoringResult {
+  id: string
+  type: "internal" | "external"
+  subject_id: string
+  class_id: string
+  date: string
+  score: number
+  max_score: number
+  subjects?: { name: string } | null
+  classes?: { name: string } | null
+}
+
+interface SubjectInfo {
+  id: string
+  name: string
+}
+
+interface WorkloadInfo {
+  id: string
+  teacher_id: string
+  subject_id: string
+  class_id: string
+  hours_per_week: number
+  subjects?: { name: string } | null
+  classes?: { name: string } | null
+  staff?: { full_name: string } | null
+}
+
+interface AttendanceStats {
+  totalStudents: number
+  presentToday: number
+  absentToday: number
+  lateToday: number
+  attendanceRate: number
+  problematicStudents: {
+    id: string
+    full_name: string
+    absences: number
+    class_name: string
+  }[]
 }
 
 const staffTypeLabels: Record<string, string> = {
@@ -223,6 +299,32 @@ export default function StaffProfilePage() {
   const [studentScores, setStudentScores] = useState<Record<string, Record<string, number>>>({})
   const [isLoadingAssessment, setIsLoadingAssessment] = useState(false)
   const [isSavingAssessment, setIsSavingAssessment] = useState(false)
+  
+  // Role and permissions
+  const [staffRole, setStaffRole] = useState<StaffRole | null>(null)
+  const [permissions, setPermissions] = useState<StaffPermissions | null>(null)
+  
+  // O'quv ishlari DO states
+  const [allGrades, setAllGrades] = useState<GradeResult[]>([])
+  const [monitoringResults, setMonitoringResults] = useState<MonitoringResult[]>([])
+  const [allSubjects, setAllSubjects] = useState<SubjectInfo[]>([])
+  const [allClasses, setAllClasses] = useState<ClassInfo[]>([])
+  const [workloads, setWorkloads] = useState<WorkloadInfo[]>([])
+  const [allTeachers, setAllTeachers] = useState<{ id: string; full_name: string; subject_id: string | null }[]>([])
+  
+  // Ma'naviy-ma'rifiy DO states
+  const [attendanceStats, setAttendanceStats] = useState<AttendanceStats | null>(null)
+  const [classTeachers, setClassTeachers] = useState<{ class_id: string; teacher_id: string; classes?: { name: string }; staff?: { full_name: string } }[]>([])
+  
+  // Kadrlar menejeri states
+  const [allStaff, setAllStaff] = useState<Staff[]>([])
+  const [staffAttendanceStats, setStaffAttendanceStats] = useState<{ present: number; absent: number; late: number; total: number }>({ present: 0, absent: 0, late: 0, total: 0 })
+  
+  // Modal states
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
+  const [newTask, setNewTask] = useState({ title: "", description: "", priority: "medium", due_date: "", assigned_to: "" })
+  const [isStudentModalOpen, setIsStudentModalOpen] = useState(false)
+  const [newStudent, setNewStudent] = useState({ full_name: "", class_id: "", phone: "", address: "" })
 
   const supabase = createClient()
 
@@ -244,6 +346,11 @@ export default function StaffProfilePage() {
     
     if (staffData) {
       setStaff(staffData)
+      
+      // Determine role and permissions
+      const role = getStaffRole(staffData.position, staffData.staff_type)
+      setStaffRole(role)
+      setPermissions(getStaffPermissions(role))
       
       // Fetch tasks assigned to this staff
       const { data: tasksData } = await supabase
@@ -282,9 +389,139 @@ export default function StaffProfilePage() {
           setTeacherClasses(uniqueClasses)
         }
       }
+      
+      // Fetch additional data based on role
+      if (role.isAcademicDeputy || role.isDirector) {
+        await fetchAcademicData()
+      }
+      
+      if (role.isMoralDeputy || role.isDirector) {
+        await fetchMoralData()
+      }
+      
+      if (role.isHRManager || role.isDirector) {
+        await fetchHRData()
+      }
     }
     
     setIsLoading(false)
+  }
+  
+  // Fetch data for O'quv ishlari DO
+  const fetchAcademicData = async () => {
+    // Fetch all grades
+    const { data: gradesData } = await supabase
+      .from("grades")
+      .select("*, students(full_name, class_id), subjects(name)")
+      .order("created_at", { ascending: false })
+      .limit(100)
+    if (gradesData) setAllGrades(gradesData)
+    
+    // Fetch all subjects
+    const { data: subjectsData } = await supabase
+      .from("subjects")
+      .select("id, name")
+      .order("name")
+    if (subjectsData) setAllSubjects(subjectsData)
+    
+    // Fetch all classes
+    const { data: classesData } = await supabase
+      .from("classes")
+      .select("id, name, grade, section")
+      .order("grade")
+    if (classesData) setAllClasses(classesData)
+    
+    // Fetch all teachers
+    const { data: teachersData } = await supabase
+      .from("staff")
+      .select("id, full_name, subject_id")
+      .eq("staff_type", "pedagogue")
+      .order("full_name")
+    if (teachersData) setAllTeachers(teachersData)
+    
+    // Fetch workloads
+    const { data: workloadsData } = await supabase
+      .from("schedule")
+      .select("*, subjects(name), classes(name), staff(full_name)")
+      .order("created_at", { ascending: false })
+    if (workloadsData) setWorkloads(workloadsData)
+  }
+  
+  // Fetch data for Ma'naviy-ma'rifiy DO
+  const fetchMoralData = async () => {
+    // Fetch class teachers
+    const { data: classTeachersData } = await supabase
+      .from("class_teachers")
+      .select("*, classes(name), staff(full_name)")
+    if (classTeachersData) setClassTeachers(classTeachersData)
+    
+    // Calculate attendance stats
+    const today = new Date().toISOString().split("T")[0]
+    const { data: todayAttendance } = await supabase
+      .from("student_attendance")
+      .select("*")
+      .eq("date", today)
+    
+    const { data: allStudents } = await supabase
+      .from("students")
+      .select("id")
+      .eq("status", "active")
+    
+    // Get students with most absences (last 30 days)
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const { data: absenceData } = await supabase
+      .from("student_attendance")
+      .select("student_id, students(full_name, classes(name))")
+      .eq("status", "absent")
+      .gte("date", thirtyDaysAgo.toISOString().split("T")[0])
+    
+    const absenceCounts: Record<string, { count: number; name: string; className: string }> = {}
+    absenceData?.forEach((a: any) => {
+      if (!absenceCounts[a.student_id]) {
+        absenceCounts[a.student_id] = { count: 0, name: a.students?.full_name || "", className: a.students?.classes?.name || "" }
+      }
+      absenceCounts[a.student_id].count++
+    })
+    
+    const problematicStudents = Object.entries(absenceCounts)
+      .filter(([_, data]) => data.count >= 3)
+      .map(([id, data]) => ({ id, full_name: data.name, absences: data.count, class_name: data.className }))
+      .sort((a, b) => b.absences - a.absences)
+      .slice(0, 10)
+    
+    setAttendanceStats({
+      totalStudents: allStudents?.length || 0,
+      presentToday: todayAttendance?.filter(a => a.status === "present").length || 0,
+      absentToday: todayAttendance?.filter(a => a.status === "absent").length || 0,
+      lateToday: todayAttendance?.filter(a => a.status === "late").length || 0,
+      attendanceRate: allStudents?.length ? Math.round((todayAttendance?.filter(a => a.status === "present").length || 0) / allStudents.length * 100) : 0,
+      problematicStudents
+    })
+  }
+  
+  // Fetch data for HR Manager
+  const fetchHRData = async () => {
+    // Fetch all staff
+    const { data: staffData } = await supabase
+      .from("staff")
+      .select("*, departments(name), subjects(name)")
+      .order("full_name")
+    if (staffData) setAllStaff(staffData)
+    
+    // Fetch today's staff attendance
+    const today = new Date().toISOString().split("T")[0]
+    const { data: todayStaffAttendance } = await supabase
+      .from("staff_attendance")
+      .select("*")
+      .eq("date", today)
+    
+    setStaffAttendanceStats({
+      present: todayStaffAttendance?.filter(a => a.status === "present").length || 0,
+      absent: todayStaffAttendance?.filter(a => a.status === "absent").length || 0,
+      late: todayStaffAttendance?.filter(a => a.status === "late").length || 0,
+      total: staffData?.length || 0
+    })
   }
 
   // Fetch students when class is selected
@@ -712,15 +949,53 @@ export default function StaffProfilePage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="bg-secondary">
+        <TabsList className="bg-secondary flex-wrap h-auto gap-1 p-1">
           <TabsTrigger value="malumotlar">Ma'lumotlar</TabsTrigger>
           <TabsTrigger value="topshiriqlar">Topshiriqlar</TabsTrigger>
           <TabsTrigger value="davomat">Davomat</TabsTrigger>
+          
+          {/* Pedagog tablari */}
           {staff.staff_type === "pedagogue" && (
             <TabsTrigger value="yoklama">O'quvchilar yo'qlama</TabsTrigger>
           )}
           {staff.staff_type === "pedagogue" && (
             <TabsTrigger value="summativ">Summativ baholash</TabsTrigger>
+          )}
+          
+          {/* O'quv ishlari DO tablari */}
+          {staffRole?.isAcademicDeputy && (
+            <>
+              <TabsTrigger value="grades">Baholash natijalari</TabsTrigger>
+              <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
+              <TabsTrigger value="subjects">Fan biriktirish</TabsTrigger>
+              <TabsTrigger value="workload">O'quv yuklama</TabsTrigger>
+            </>
+          )}
+          
+          {/* Ma'naviy-ma'rifiy DO tablari */}
+          {staffRole?.isMoralDeputy && (
+            <>
+              <TabsTrigger value="class-teachers">Sinf rahbarlari</TabsTrigger>
+              <TabsTrigger value="student-attendance">Davomat nazorati</TabsTrigger>
+              <TabsTrigger value="ai-analysis">AI tahlil</TabsTrigger>
+            </>
+          )}
+          
+          {/* Kadrlar menejeri tablari */}
+          {staffRole?.isHRManager && (
+            <>
+              <TabsTrigger value="task-management">Topshiriq yaratish</TabsTrigger>
+              <TabsTrigger value="staff-attendance">Xodimlar davomati</TabsTrigger>
+              <TabsTrigger value="staff-management">Kadrlar bazasi</TabsTrigger>
+            </>
+          )}
+          
+          {/* Direktor tablari */}
+          {staffRole?.isDirector && (
+            <>
+              <TabsTrigger value="director-overview">Umumiy nazorat</TabsTrigger>
+              <TabsTrigger value="director-reports">Hisobotlar</TabsTrigger>
+            </>
           )}
         </TabsList>
 
@@ -1398,7 +1673,940 @@ export default function StaffProfilePage() {
             </Card>
           </TabsContent>
         )}
+
+        {/* O'quv ishlari DO - Baholash natijalari */}
+        {staffRole?.isAcademicDeputy && (
+          <TabsContent value="grades" className="space-y-4">
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  Summativ baholash natijalari
+                </CardTitle>
+                <CardDescription>Barcha fanlar bo'yicha BSB va CHSB natijalari</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-4 mb-6">
+                  <Card className="bg-muted/30">
+                    <CardContent className="p-4">
+                      <div className="text-2xl font-bold text-green-500">
+                        {allGrades.filter(g => (g.score / g.max_score) * 100 >= 86).length}
+                      </div>
+                      <div className="text-sm text-muted-foreground">A'lo (86-100%)</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-muted/30">
+                    <CardContent className="p-4">
+                      <div className="text-2xl font-bold text-blue-500">
+                        {allGrades.filter(g => { const p = (g.score / g.max_score) * 100; return p >= 71 && p < 86 }).length}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Yaxshi (71-85%)</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-muted/30">
+                    <CardContent className="p-4">
+                      <div className="text-2xl font-bold text-yellow-500">
+                        {allGrades.filter(g => { const p = (g.score / g.max_score) * 100; return p >= 56 && p < 71 }).length}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Qoniqarli (56-70%)</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-muted/30">
+                    <CardContent className="p-4">
+                      <div className="text-2xl font-bold text-red-500">
+                        {allGrades.filter(g => (g.score / g.max_score) * 100 < 56).length}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Qoniqarsiz (0-55%)</div>
+                    </CardContent>
+                  </Card>
+                </div>
+                
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>O'quvchi</TableHead>
+                      <TableHead>Fan</TableHead>
+                      <TableHead>Turi</TableHead>
+                      <TableHead>Chorak</TableHead>
+                      <TableHead>Ball</TableHead>
+                      <TableHead>Foiz</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allGrades.slice(0, 20).map((grade) => (
+                      <TableRow key={grade.id}>
+                        <TableCell className="font-medium">{grade.students?.full_name || "-"}</TableCell>
+                        <TableCell>{grade.subjects?.name || "-"}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {grade.grade_type.includes("summative") ? "BSB" : "CHSB"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{grade.quarter}-chorak</TableCell>
+                        <TableCell>{grade.score}/{grade.max_score}</TableCell>
+                        <TableCell>
+                          <Badge className={cn(
+                            (grade.score / grade.max_score) * 100 >= 86 ? "bg-green-500/20 text-green-400" :
+                            (grade.score / grade.max_score) * 100 >= 71 ? "bg-blue-500/20 text-blue-400" :
+                            (grade.score / grade.max_score) * 100 >= 56 ? "bg-yellow-500/20 text-yellow-400" :
+                            "bg-red-500/20 text-red-400"
+                          )}>
+                            {Math.round((grade.score / grade.max_score) * 100)}%
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {allGrades.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                          Baholash natijalari topilmadi
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* O'quv ishlari DO - Monitoring */}
+        {staffRole?.isAcademicDeputy && (
+          <TabsContent value="monitoring" className="space-y-4">
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Target className="h-5 w-5" />
+                  Ichki va tashqi monitoring
+                </CardTitle>
+                <CardDescription>Monitoring natijalari va tahlil</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8 text-muted-foreground">
+                  <Target className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Monitoring natijalari hali kiritilmagan</p>
+                  <p className="text-sm">Monitoring natijalari ma'lumotlar bazasiga qo'shilganda bu yerda ko'rinadi</p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* O'quv ishlari DO - Fan biriktirish */}
+        {staffRole?.isAcademicDeputy && (
+          <TabsContent value="subjects" className="space-y-4">
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <BookOpen className="h-5 w-5" />
+                  O'qituvchilarga fan biriktirish
+                </CardTitle>
+                <CardDescription>O'qituvchilar va ularga biriktirilgan fanlar</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>O'qituvchi</TableHead>
+                      <TableHead>Biriktirilgan fan</TableHead>
+                      <TableHead>Holat</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allTeachers.map((teacher) => (
+                      <TableRow key={teacher.id}>
+                        <TableCell className="font-medium">{teacher.full_name}</TableCell>
+                        <TableCell>
+                          {allSubjects.find(s => s.id === teacher.subject_id)?.name || "-"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={teacher.subject_id ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"}>
+                            {teacher.subject_id ? "Biriktirilgan" : "Biriktirilmagan"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {allTeachers.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                          O'qituvchilar topilmadi
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* O'quv ishlari DO - O'quv yuklama */}
+        {staffRole?.isAcademicDeputy && (
+          <TabsContent value="workload" className="space-y-4">
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <ClipboardList className="h-5 w-5" />
+                  O'quv yuklamalari
+                </CardTitle>
+                <CardDescription>O'qituvchilar dars yuklama ma'lumotlari</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>O'qituvchi</TableHead>
+                      <TableHead>Fan</TableHead>
+                      <TableHead>Sinf</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {workloads.slice(0, 20).map((w, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="font-medium">{w.staff?.full_name || "-"}</TableCell>
+                        <TableCell>{w.subjects?.name || "-"}</TableCell>
+                        <TableCell>{w.classes?.name || "-"}</TableCell>
+                      </TableRow>
+                    ))}
+                    {workloads.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                          O'quv yuklama ma'lumotlari topilmadi
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* Ma'naviy-ma'rifiy DO - Sinf rahbarlari */}
+        {staffRole?.isMoralDeputy && (
+          <TabsContent value="class-teachers" className="space-y-4">
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Sinf rahbarlarini biriktirish
+                </CardTitle>
+                <CardDescription>Sinflar va ularga biriktirilgan rahbarlar</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Sinf</TableHead>
+                      <TableHead>Sinf rahbari</TableHead>
+                      <TableHead>Holat</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allClasses.map((cls) => {
+                      const classTeacher = classTeachers.find(ct => ct.class_id === cls.id)
+                      return (
+                        <TableRow key={cls.id}>
+                          <TableCell className="font-medium">{cls.name}</TableCell>
+                          <TableCell>{classTeacher?.staff?.full_name || "-"}</TableCell>
+                          <TableCell>
+                            <Badge className={classTeacher ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"}>
+                              {classTeacher ? "Biriktirilgan" : "Bo'sh"}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                    {allClasses.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                          Sinflar topilmadi
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* Ma'naviy-ma'rifiy DO - Davomat nazorati */}
+        {staffRole?.isMoralDeputy && (
+          <TabsContent value="student-attendance" className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-4">
+              <Card className="bg-card border-border">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
+                      <Users className="h-5 w-5 text-blue-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{attendanceStats?.totalStudents || 0}</p>
+                      <p className="text-sm text-muted-foreground">Jami o'quvchilar</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-card border-border">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-green-500">{attendanceStats?.presentToday || 0}</p>
+                      <p className="text-sm text-muted-foreground">Bugun keldi</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-card border-border">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10">
+                      <X className="h-5 w-5 text-red-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-red-500">{attendanceStats?.absentToday || 0}</p>
+                      <p className="text-sm text-muted-foreground">Bugun kelmadi</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-card border-border">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-500/10">
+                      <Clock className="h-5 w-5 text-yellow-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-yellow-500">{attendanceStats?.lateToday || 0}</p>
+                      <p className="text-sm text-muted-foreground">Kechikdi</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-red-500" />
+                  Muammoli o'quvchilar (30 kun ichida 3+ sababsiz)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>O'quvchi</TableHead>
+                      <TableHead>Sinf</TableHead>
+                      <TableHead>Sababsiz kunlar</TableHead>
+                      <TableHead>Holat</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {attendanceStats?.problematicStudents.map((student) => (
+                      <TableRow key={student.id}>
+                        <TableCell className="font-medium">{student.full_name}</TableCell>
+                        <TableCell>{student.class_name}</TableCell>
+                        <TableCell>
+                          <Badge className="bg-red-500/20 text-red-400">
+                            {student.absences} kun
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={student.absences >= 5 ? "bg-red-500/20 text-red-400" : "bg-yellow-500/20 text-yellow-400"}>
+                            {student.absences >= 5 ? "Jiddiy" : "Ogohlantirish"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(!attendanceStats?.problematicStudents || attendanceStats.problematicStudents.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                          Muammoli o'quvchilar topilmadi
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* Ma'naviy-ma'rifiy DO - AI tahlil */}
+        {staffRole?.isMoralDeputy && (
+          <TabsContent value="ai-analysis" className="space-y-4">
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Brain className="h-5 w-5" />
+                  AI tahlili va tavsiyalar
+                </CardTitle>
+                <CardDescription>Sun'iy intellekt yordamida davomat tahlili</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="p-4 bg-muted/30 rounded-lg">
+                    <h4 className="font-medium mb-2 flex items-center gap-2">
+                      <TrendingDown className="h-4 w-4 text-red-500" />
+                      Aniqlangan muammolar
+                    </h4>
+                    <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                      <li>{attendanceStats?.problematicStudents.length || 0} o'quvchi muntazam darsga kelmayapti</li>
+                      <li>O'rtacha davomat: {attendanceStats?.attendanceRate || 0}%</li>
+                      {attendanceStats?.absentToday && attendanceStats.absentToday > 10 && (
+                        <li>Bugun {attendanceStats.absentToday} o'quvchi kelmadi - bu normaldan yuqori</li>
+                      )}
+                    </ul>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/30 rounded-lg">
+                    <h4 className="font-medium mb-2 flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-green-500" />
+                      AI tavsiyalari
+                    </h4>
+                    <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                      <li>Muammoli o'quvchilar ota-onalari bilan suhbat o'tkazing</li>
+                      <li>Sinf rahbarlari bilan haftalik yig'ilish o'tkazing</li>
+                      <li>Davomat bo'yicha rag'batlantirish tizimini joriy qiling</li>
+                      {attendanceStats?.problematicStudents && attendanceStats.problematicStudents.length > 5 && (
+                        <li>Ko'p kelmaydigan o'quvchilar uchun maxsus dastur ishlab chiqing</li>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* Kadrlar menejeri - Topshiriq yaratish */}
+        {staffRole?.isHRManager && (
+          <TabsContent value="task-management" className="space-y-4">
+            <Card className="bg-card border-border">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <ClipboardList className="h-5 w-5" />
+                    Topshiriqlar boshqaruvi
+                  </CardTitle>
+                  <CardDescription>Xodimlarga topshiriq yaratish va nazorat</CardDescription>
+                </div>
+                <Button onClick={() => setIsTaskModalOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Yangi topshiriq
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Sarlavha</TableHead>
+                      <TableHead>Xodim</TableHead>
+                      <TableHead>Muhimlik</TableHead>
+                      <TableHead>Holat</TableHead>
+                      <TableHead>Muddat</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tasks.map((task) => (
+                      <TableRow key={task.id}>
+                        <TableCell className="font-medium">{task.title}</TableCell>
+                        <TableCell>{staff?.full_name}</TableCell>
+                        <TableCell>
+                          <Badge className={priorityColors[task.priority]}>
+                            {priorityLabels[task.priority]}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={statusColors[task.status]}>
+                            {statusLabels[task.status]}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{formatShortDate(task.due_date)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* Kadrlar menejeri - Xodimlar davomati */}
+        {staffRole?.isHRManager && (
+          <TabsContent value="staff-attendance" className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-4">
+              <Card className="bg-card border-border">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
+                      <Users className="h-5 w-5 text-blue-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{staffAttendanceStats.total}</p>
+                      <p className="text-sm text-muted-foreground">Jami xodimlar</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-card border-border">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-green-500">{staffAttendanceStats.present}</p>
+                      <p className="text-sm text-muted-foreground">Bugun keldi</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-card border-border">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10">
+                      <X className="h-5 w-5 text-red-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-red-500">{staffAttendanceStats.absent}</p>
+                      <p className="text-sm text-muted-foreground">Kelmadi</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-card border-border">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-500/10">
+                      <Clock className="h-5 w-5 text-yellow-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-yellow-500">{staffAttendanceStats.late}</p>
+                      <p className="text-sm text-muted-foreground">Kechikdi</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-lg">Xodimlar davomati</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Xodim</TableHead>
+                      <TableHead>Lavozim</TableHead>
+                      <TableHead>Bo'lim</TableHead>
+                      <TableHead>Holat</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allStaff.slice(0, 20).map((s) => (
+                      <TableRow key={s.id}>
+                        <TableCell className="font-medium">{s.full_name}</TableCell>
+                        <TableCell>{s.position}</TableCell>
+                        <TableCell>{s.departments?.name || "-"}</TableCell>
+                        <TableCell>
+                          <Badge className={s.status === "active" ? "bg-green-500/20 text-green-400" : "bg-muted text-muted-foreground"}>
+                            {s.status === "active" ? "Faol" : "Nofaol"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* Kadrlar menejeri - Kadrlar bazasi */}
+        {staffRole?.isHRManager && (
+          <TabsContent value="staff-management" className="space-y-4">
+            <Card className="bg-card border-border">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Kadrlar ma'lumotlar bazasi
+                  </CardTitle>
+                  <CardDescription>Xodimlarni boshqarish va o'quvchilarni qabul qilish</CardDescription>
+                </div>
+                <Button onClick={() => setIsStudentModalOpen(true)}>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  O'quvchi qabul qilish
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-3 mb-6">
+                  <Card className="bg-muted/30">
+                    <CardContent className="p-4">
+                      <div className="text-2xl font-bold">{allStaff.filter(s => s.staff_type === "pedagogue").length}</div>
+                      <div className="text-sm text-muted-foreground">Pedagoglar</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-muted/30">
+                    <CardContent className="p-4">
+                      <div className="text-2xl font-bold">{allStaff.filter(s => s.staff_type === "technical").length}</div>
+                      <div className="text-sm text-muted-foreground">Texnik xodimlar</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-muted/30">
+                    <CardContent className="p-4">
+                      <div className="text-2xl font-bold">{allStaff.filter(s => s.staff_type === "management").length}</div>
+                      <div className="text-sm text-muted-foreground">Rahbariyat</div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Xodim</TableHead>
+                      <TableHead>Lavozim</TableHead>
+                      <TableHead>Turi</TableHead>
+                      <TableHead>Telefon</TableHead>
+                      <TableHead>Holat</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allStaff.map((s) => (
+                      <TableRow key={s.id}>
+                        <TableCell className="font-medium">{s.full_name}</TableCell>
+                        <TableCell>{s.position}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {staffTypeLabels[s.staff_type]}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{s.phone || "-"}</TableCell>
+                        <TableCell>
+                          <Badge className={s.status === "active" ? "bg-green-500/20 text-green-400" : "bg-muted text-muted-foreground"}>
+                            {s.status === "active" ? "Faol" : "Nofaol"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* Direktor - Umumiy nazorat */}
+        {staffRole?.isDirector && (
+          <TabsContent value="director-overview" className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Card className="bg-card border-border">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                      <Users className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{allStaff.length}</p>
+                      <p className="text-sm text-muted-foreground">Jami xodimlar</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-card border-border">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
+                      <GraduationCap className="h-5 w-5 text-blue-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{attendanceStats?.totalStudents || 0}</p>
+                      <p className="text-sm text-muted-foreground">Jami o'quvchilar</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-card border-border">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
+                      <Activity className="h-5 w-5 text-green-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-green-500">{attendanceStats?.attendanceRate || 0}%</p>
+                      <p className="text-sm text-muted-foreground">Davomat</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-card border-border">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-500/10">
+                      <BarChart3 className="h-5 w-5 text-yellow-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{allGrades.length}</p>
+                      <p className="text-sm text-muted-foreground">Baholash natijalari</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card className="bg-card border-border">
+                <CardHeader>
+                  <CardTitle className="text-lg">Xodimlar taqsimoti</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span>Pedagoglar</span>
+                      <Badge>{allStaff.filter(s => s.staff_type === "pedagogue").length}</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Texnik xodimlar</span>
+                      <Badge>{allStaff.filter(s => s.staff_type === "technical").length}</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Rahbariyat</span>
+                      <Badge>{allStaff.filter(s => s.staff_type === "management").length}</Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-card border-border">
+                <CardHeader>
+                  <CardTitle className="text-lg">Bugungi holat</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span>O'quvchilar keldi</span>
+                      <Badge className="bg-green-500/20 text-green-400">{attendanceStats?.presentToday || 0}</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>O'quvchilar kelmadi</span>
+                      <Badge className="bg-red-500/20 text-red-400">{attendanceStats?.absentToday || 0}</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Xodimlar keldi</span>
+                      <Badge className="bg-green-500/20 text-green-400">{staffAttendanceStats.present}</Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        )}
+
+        {/* Direktor - Hisobotlar */}
+        {staffRole?.isDirector && (
+          <TabsContent value="director-reports" className="space-y-4">
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Umumiy hisobotlar
+                </CardTitle>
+                <CardDescription>Maktab faoliyati bo'yicha umumiy hisobotlar</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="p-4 bg-muted/30 rounded-lg">
+                    <h4 className="font-medium mb-3">O'quv ishlari</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Baholangan o'quvchilar:</span>
+                        <span>{allGrades.length}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">A'lo baholar:</span>
+                        <span className="text-green-500">{allGrades.filter(g => (g.score / g.max_score) * 100 >= 86).length}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Qoniqarsiz baholar:</span>
+                        <span className="text-red-500">{allGrades.filter(g => (g.score / g.max_score) * 100 < 56).length}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/30 rounded-lg">
+                    <h4 className="font-medium mb-3">Davomat</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">O'rtacha davomat:</span>
+                        <span>{attendanceStats?.attendanceRate || 0}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Muammoli o'quvchilar:</span>
+                        <span className="text-red-500">{attendanceStats?.problematicStudents.length || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
+
+      {/* Task Modal */}
+      <Dialog open={isTaskModalOpen} onOpenChange={setIsTaskModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Yangi topshiriq yaratish</DialogTitle>
+            <DialogDescription>Xodimga yangi vazifa biriktiring</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Sarlavha</Label>
+              <Input
+                value={newTask.title}
+                onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                placeholder="Topshiriq sarlavhasi"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Tavsif</Label>
+              <Textarea
+                value={newTask.description}
+                onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                placeholder="Topshiriq tavsifi"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Muhimlik</Label>
+                <Select value={newTask.priority} onValueChange={(v) => setNewTask({ ...newTask, priority: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Past</SelectItem>
+                    <SelectItem value="medium">O'rta</SelectItem>
+                    <SelectItem value="high">Yuqori</SelectItem>
+                    <SelectItem value="urgent">Shoshilinch</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Muddat</Label>
+                <Input
+                  type="date"
+                  value={newTask.due_date}
+                  onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Xodim</Label>
+              <Select value={newTask.assigned_to} onValueChange={(v) => setNewTask({ ...newTask, assigned_to: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Xodimni tanlang" />
+                </SelectTrigger>
+                <SelectContent>
+                  {allStaff.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.full_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsTaskModalOpen(false)}>Bekor qilish</Button>
+            <Button onClick={async () => {
+              if (newTask.title && newTask.assigned_to) {
+                await supabase.from("tasks").insert({
+                  title: newTask.title,
+                  description: newTask.description,
+                  priority: newTask.priority,
+                  due_date: newTask.due_date || null,
+                  assigned_to: newTask.assigned_to,
+                  status: "pending"
+                })
+                setIsTaskModalOpen(false)
+                setNewTask({ title: "", description: "", priority: "medium", due_date: "", assigned_to: "" })
+                fetchStaffData()
+              }
+            }}>Saqlash</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Student Modal */}
+      <Dialog open={isStudentModalOpen} onOpenChange={setIsStudentModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>O'quvchi qabul qilish</DialogTitle>
+            <DialogDescription>Maktabga yangi o'quvchi qo'shish</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>F.I.O.</Label>
+              <Input
+                value={newStudent.full_name}
+                onChange={(e) => setNewStudent({ ...newStudent, full_name: e.target.value })}
+                placeholder="To'liq ism"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Sinf</Label>
+              <Select value={newStudent.class_id} onValueChange={(v) => setNewStudent({ ...newStudent, class_id: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sinfni tanlang" />
+                </SelectTrigger>
+                <SelectContent>
+                  {allClasses.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Telefon</Label>
+              <Input
+                value={newStudent.phone}
+                onChange={(e) => setNewStudent({ ...newStudent, phone: e.target.value })}
+                placeholder="+998 90 123 45 67"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Manzil</Label>
+              <Textarea
+                value={newStudent.address}
+                onChange={(e) => setNewStudent({ ...newStudent, address: e.target.value })}
+                placeholder="Yashash manzili"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsStudentModalOpen(false)}>Bekor qilish</Button>
+            <Button onClick={async () => {
+              if (newStudent.full_name) {
+                await supabase.from("students").insert({
+                  full_name: newStudent.full_name,
+                  class_id: newStudent.class_id || null,
+                  phone: newStudent.phone || null,
+                  address: newStudent.address || null,
+                  status: "active"
+                })
+                setIsStudentModalOpen(false)
+                setNewStudent({ full_name: "", class_id: "", phone: "", address: "" })
+              }
+            }}>Qabul qilish</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
