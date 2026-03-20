@@ -688,6 +688,7 @@ export default function KadrlarPage() {
                       <Button onClick={() => {
                         setEditingStaff(null)
                         setStaffForm({ full_name: "", position: "", department_id: "", phone: "", hire_date: "", staff_type: "technical", subject_id: "" })
+                        setIsStaffModalOpen(true)
                       }}>
                         <Plus className="h-4 w-4 mr-2" />
                         Xodim qo'shish
@@ -744,7 +745,10 @@ export default function KadrlarPage() {
                           <Label>F.I.O.</Label>
                           <Input
                             value={staffForm.full_name}
-                            onChange={(e) => setStaffForm({ ...staffForm, full_name: e.target.value })}
+                            onChange={(e) => {
+                              console.log("[v0] full_name changed:", e.target.value)
+                              setStaffForm({ ...staffForm, full_name: e.target.value })
+                            }}
                             placeholder="To'liq ism"
                           />
                         </div>
@@ -752,7 +756,10 @@ export default function KadrlarPage() {
                           <Label>Lavozim</Label>
                           <Input
                             value={staffForm.position}
-                            onChange={(e) => setStaffForm({ ...staffForm, position: e.target.value })}
+                            onChange={(e) => {
+                              console.log("[v0] position changed:", e.target.value)
+                              setStaffForm({ ...staffForm, position: e.target.value })
+                            }}
                             placeholder="Lavozim"
                           />
                         </div>
@@ -777,12 +784,12 @@ export default function KadrlarPage() {
                         <Button variant="outline" onClick={() => setIsStaffModalOpen(false)}>Bekor qilish</Button>
                         <Button 
                           onClick={() => {
-                            console.log("[v0] Save button clicked")
+                            console.log("[v0] Save button clicked, form:", staffForm)
                             handleSaveStaff()
                           }}
                           disabled={!staffForm.full_name || !staffForm.position}
                         >
-                          Saqlash
+                          Saqlash {!staffForm.full_name || !staffForm.position ? "(to'ldiring)" : ""}
                         </Button>
                       </DialogFooter>
                     </DialogContent>
