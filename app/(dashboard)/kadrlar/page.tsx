@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -809,14 +810,14 @@ export default function KadrlarPage() {
                   {filteredStaff.map((s) => (
                     <TableRow key={s.id}>
                       <TableCell>
-                        <div className="flex items-center gap-3">
+                        <Link href={`/kadrlar/${s.id}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
                           <Avatar className="h-9 w-9">
                             <AvatarFallback className="bg-primary/10 text-primary text-sm">
                               {s.full_name.split(" ").map((n) => n[0]).join("")}
                             </AvatarFallback>
                           </Avatar>
-                          <span className="font-medium">{s.full_name}</span>
-                        </div>
+                          <span className="font-medium hover:underline">{s.full_name}</span>
+                        </Link>
                       </TableCell>
                       <TableCell>{s.position}</TableCell>
                       <TableCell>{s.departments?.name || "-"}</TableCell>
@@ -834,6 +835,12 @@ export default function KadrlarPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <Link href={`/kadrlar/${s.id}`}>
+                                <Users className="h-4 w-4 mr-2" />
+                                Profilni ko'rish
+                              </Link>
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleEditStaff(s)}>
                               <Edit className="h-4 w-4 mr-2" />
                               Tahrirlash

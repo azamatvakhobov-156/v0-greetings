@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard,
   CalendarCheck,
-  CalendarDays,
+
   BookOpen,
   Heart,
   Users,
@@ -52,11 +52,7 @@ const mainNavItems = [
     url: "/davomat",
     icon: CalendarCheck,
   },
-  {
-    title: "Dars jadvali",
-    url: "/dars-jadvali",
-    icon: CalendarDays,
-  },
+
   {
     title: "O'quv bo'limi",
     url: "/oquv-bolimi",
