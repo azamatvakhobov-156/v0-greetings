@@ -683,17 +683,16 @@ export default function KadrlarPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <Button onClick={() => {
+                      console.log("[v0] Add staff button clicked")
+                      setEditingStaff(null)
+                      setStaffForm({ full_name: "", position: "", department_id: "", phone: "", hire_date: "", staff_type: "technical", subject_id: "" })
+                      setIsStaffModalOpen(true)
+                    }}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Xodim qo'shish
+                    </Button>
                   <Dialog open={isStaffModalOpen} onOpenChange={setIsStaffModalOpen}>
-                    <DialogTrigger asChild>
-                      <Button onClick={() => {
-                        setEditingStaff(null)
-                        setStaffForm({ full_name: "", position: "", department_id: "", phone: "", hire_date: "", staff_type: "technical", subject_id: "" })
-                        setIsStaffModalOpen(true)
-                      }}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Xodim qo'shish
-                      </Button>
-                    </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
                         <DialogTitle>
