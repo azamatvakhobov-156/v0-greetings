@@ -18,10 +18,27 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { format } from "date-fns"
+import { uz } from "date-fns/locale"
+import { cn } from "@/lib/utils"
+import {
   ArrowLeft,
   Phone,
   Mail,
   Calendar,
+  CalendarIcon,
   Briefcase,
   GraduationCap,
   Building2,
@@ -31,6 +48,10 @@ import {
   User,
   FileText,
   ClipboardList,
+  Users,
+  Check,
+  X,
+  Save,
 } from "lucide-react"
 
 interface Staff {
