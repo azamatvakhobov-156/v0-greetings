@@ -273,7 +273,11 @@ export default function KadrlarPage() {
 
   // Staff CRUD
   const handleSaveStaff = async () => {
-    if (!staffForm.full_name || !staffForm.position) return
+    console.log("[v0] handleSaveStaff called", staffForm)
+    if (!staffForm.full_name || !staffForm.position) {
+      console.log("[v0] Validation failed - missing full_name or position")
+      return
+    }
 
     const staffData = {
       full_name: staffForm.full_name,
@@ -285,13 +289,17 @@ export default function KadrlarPage() {
       subject_id: staffForm.staff_type === "pedagogue" ? (staffForm.subject_id || null) : null,
     }
 
+    console.log("[v0] Saving staff data:", staffData)
+
     if (editingStaff) {
-      await supabase
+      const { error } = await supabase
         .from("staff")
         .update(staffData)
         .eq("id", editingStaff.id)
+      console.log("[v0] Update result:", error ? error : "success")
     } else {
-      await supabase.from("staff").insert(staffData)
+      const { error } = await supabase.from("staff").insert(staffData)
+      console.log("[v0] Insert result:", error ? error : "success")
     }
 
     setIsStaffModalOpen(false)
