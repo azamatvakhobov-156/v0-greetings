@@ -222,10 +222,11 @@ export default function KadrlarPage() {
   }
 
   const fetchStaff = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("staff")
       .select("*, departments(name), subjects(name)")
       .order("full_name")
+    console.log("[v0] fetchStaff result:", { data, error, count: data?.length })
     if (data) setStaff(data)
   }
 
