@@ -1,8 +1,12 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
 export async function GET() {
-  const supabase = await createClient()
   
   const { data, error } = await supabase
     .from("staff")
@@ -18,7 +22,6 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
   const body = await request.json()
   
   const { data, error } = await supabase
@@ -36,7 +39,6 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const supabase = await createClient()
   const body = await request.json()
   const { id, ...staffData } = body
   
@@ -56,7 +58,6 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const supabase = await createClient()
   const { searchParams } = new URL(request.url)
   const id = searchParams.get("id")
   
