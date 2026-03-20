@@ -91,6 +91,28 @@ interface StaffAttendance {
   notes: string | null
 }
 
+interface ClassInfo {
+  id: string
+  name: string
+  grade: number
+  section: string
+}
+
+interface StudentInfo {
+  id: string
+  full_name: string
+  class_id: string | null
+  classes?: { name: string } | null
+}
+
+interface StudentAttendanceRecord {
+  id: string
+  student_id: string
+  date: string
+  status: "present" | "absent" | "late" | "excused"
+  notes: string | null
+}
+
 const staffTypeLabels: Record<string, string> = {
   technical: "Texnik xodim",
   pedagogue: "Pedagog",
@@ -141,6 +163,20 @@ const attendanceStatusColors: Record<string, string> = {
   on_leave: "bg-purple-500/20 text-purple-400"
 }
 
+const studentAttendanceStatusLabels: Record<string, string> = {
+  present: "Keldi",
+  absent: "Kelmadi",
+  late: "Kechikdi",
+  excused: "Sababli"
+}
+
+const studentAttendanceStatusColors: Record<string, string> = {
+  present: "bg-green-500/20 text-green-400",
+  absent: "bg-red-500/20 text-red-400",
+  late: "bg-yellow-500/20 text-yellow-400",
+  excused: "bg-blue-500/20 text-blue-400"
+}
+
 export default function StaffProfilePage() {
   const params = useParams()
   const router = useRouter()
@@ -149,6 +185,16 @@ export default function StaffProfilePage() {
   const [attendance, setAttendance] = useState<StaffAttendance[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("malumotlar")
+  
+  // Student attendance states (for pedagogue only)
+  const [teacherClasses, setTeacherClasses] = useState<ClassInfo[]>([])
+  const [selectedClass, setSelectedClass] = useState<string>("")
+  const [students, setStudents] = useState<StudentInfo[]>([])
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [studentAttendance, setStudentAttendance] = useState<Record<string, "present" | "absent" | "late" | "excused">>({})
+  const [existingAttendance, setExistingAttendance] = useState<StudentAttendanceRecord[]>([])
+  const [isSaving, setIsSaving] = useState(false)
+  const [isLoadingStudents, setIsLoadingStudents] = useState(false)
 
   const supabase = createClient()
 
@@ -190,9 +236,112 @@ export default function StaffProfilePage() {
         .limit(30)
       
       if (attendanceData) setAttendance(attendanceData)
+      
+      // If pedagogue, fetch classes they teach
+      if (staffData.staff_type === "pedagogue") {
+        const { data: scheduleData } = await supabase
+          .from("schedule")
+          .select("class_id, classes(id, name, grade, section)")
+          .eq("teacher_id", params.id)
+        
+        if (scheduleData) {
+          const uniqueClasses = scheduleData
+            .filter((s: { classes: ClassInfo | null }) => s.classes)
+            .map((s: { classes: ClassInfo | null }) => s.classes as ClassInfo)
+            .filter((value, index, self) => 
+              index === self.findIndex((t) => t.id === value.id)
+            )
+          setTeacherClasses(uniqueClasses)
+        }
+      }
     }
     
     setIsLoading(false)
+  }
+
+  // Fetch students when class is selected
+  const fetchStudentsForClass = async (classId: string) => {
+    setIsLoadingStudents(true)
+    const { data } = await supabase
+      .from("students")
+      .select("id, full_name, class_id, classes(name)")
+      .eq("class_id", classId)
+      .eq("status", "active")
+      .order("full_name")
+    
+    if (data) {
+      setStudents(data)
+      // Initialize attendance with "present" for all students
+      const initialAttendance: Record<string, "present" | "absent" | "late" | "excused"> = {}
+      data.forEach(s => {
+        initialAttendance[s.id] = "present"
+      })
+      
+      // Check for existing attendance records for this date
+      const dateStr = format(selectedDate, "yyyy-MM-dd")
+      const { data: existingData } = await supabase
+        .from("student_attendance")
+        .select("*")
+        .eq("date", dateStr)
+        .in("student_id", data.map(s => s.id))
+      
+      if (existingData && existingData.length > 0) {
+        setExistingAttendance(existingData)
+        existingData.forEach(record => {
+          initialAttendance[record.student_id] = record.status
+        })
+      } else {
+        setExistingAttendance([])
+      }
+      
+      setStudentAttendance(initialAttendance)
+    }
+    setIsLoadingStudents(false)
+  }
+
+  // Handle class selection
+  useEffect(() => {
+    if (selectedClass) {
+      fetchStudentsForClass(selectedClass)
+    }
+  }, [selectedClass, selectedDate])
+
+  // Save student attendance
+  const saveStudentAttendance = async () => {
+    if (!selectedClass || students.length === 0) return
+    
+    setIsSaving(true)
+    const dateStr = format(selectedDate, "yyyy-MM-dd")
+    
+    // Delete existing records for this date and these students
+    if (existingAttendance.length > 0) {
+      await supabase
+        .from("student_attendance")
+        .delete()
+        .eq("date", dateStr)
+        .in("student_id", students.map(s => s.id))
+    }
+    
+    // Insert new records
+    const records = students.map(student => ({
+      student_id: student.id,
+      date: dateStr,
+      status: studentAttendance[student.id] || "present",
+      recorded_by: staff?.id
+    }))
+    
+    await supabase.from("student_attendance").insert(records)
+    
+    // Refresh existing attendance
+    const { data: newExisting } = await supabase
+      .from("student_attendance")
+      .select("*")
+      .eq("date", dateStr)
+      .in("student_id", students.map(s => s.id))
+    
+    if (newExisting) setExistingAttendance(newExisting)
+    
+    setIsSaving(false)
   }
 
   const formatDate = (dateStr: string | null) => {
@@ -388,6 +537,9 @@ export default function StaffProfilePage() {
           <TabsTrigger value="malumotlar">Ma'lumotlar</TabsTrigger>
           <TabsTrigger value="topshiriqlar">Topshiriqlar</TabsTrigger>
           <TabsTrigger value="davomat">Davomat</TabsTrigger>
+          {staff.staff_type === "pedagogue" && (
+            <TabsTrigger value="yoklama">O'quvchilar yo'qlama</TabsTrigger>
+          )}
         </TabsList>
 
         {/* Ma'lumotlar Tab */}
@@ -570,6 +722,213 @@ export default function StaffProfilePage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* O'quvchilar yo'qlama Tab (faqat pedagog uchun) */}
+        {staff.staff_type === "pedagogue" && (
+          <TabsContent value="yoklama" className="space-y-4">
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  O'quvchilar yo'qlama
+                </CardTitle>
+                <CardDescription>
+                  Sinf tanlang va o'quvchilar davomatini belgilang
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Filters */}
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <label className="text-sm text-muted-foreground mb-2 block">Sinf</label>
+                    <Select value={selectedClass} onValueChange={setSelectedClass}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sinf tanlang" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teacherClasses.map((cls) => (
+                          <SelectItem key={cls.id} value={cls.id}>
+                            {cls.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="flex-1">
+                    <label className="text-sm text-muted-foreground mb-2 block">Sana</label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !selectedDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {selectedDate ? format(selectedDate, "PPP", { locale: uz }) : "Sana tanlang"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <CalendarComponent
+                          mode="single"
+                          selected={selectedDate}
+                          onSelect={(date) => date && setSelectedDate(date)}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+
+                {teacherClasses.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Sizga biriktirilgan sinflar topilmadi</p>
+                    <p className="text-sm">Dars jadvalida sinflar biriktirilishi kerak</p>
+                  </div>
+                )}
+
+                {/* Students Table */}
+                {selectedClass && (
+                  <>
+                    {isLoadingStudents ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                      </div>
+                    ) : students.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>Bu sinfda o'quvchilar topilmadi</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <span>Jami: {students.length} o'quvchi</span>
+                            {existingAttendance.length > 0 && (
+                              <Badge variant="outline" className="text-green-500 border-green-500">
+                                <Check className="h-3 w-3 mr-1" />
+                                Saqlangan
+                              </Badge>
+                            )}
+                          </div>
+                          <Button onClick={saveStudentAttendance} disabled={isSaving}>
+                            {isSaving ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                Saqlanmoqda...
+                              </>
+                            ) : (
+                              <>
+                                <Save className="h-4 w-4 mr-2" />
+                                Saqlash
+                              </>
+                            )}
+                          </Button>
+                        </div>
+
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-12">#</TableHead>
+                              <TableHead>O'quvchi ismi</TableHead>
+                              <TableHead className="text-center">Keldi</TableHead>
+                              <TableHead className="text-center">Kelmadi</TableHead>
+                              <TableHead className="text-center">Kechikdi</TableHead>
+                              <TableHead className="text-center">Sababli</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {students.map((student, index) => (
+                              <TableRow key={student.id}>
+                                <TableCell className="text-muted-foreground">{index + 1}</TableCell>
+                                <TableCell className="font-medium">{student.full_name}</TableCell>
+                                <TableCell className="text-center">
+                                  <Button
+                                    variant={studentAttendance[student.id] === "present" ? "default" : "outline"}
+                                    size="icon"
+                                    className={cn(
+                                      "h-8 w-8",
+                                      studentAttendance[student.id] === "present" && "bg-green-600 hover:bg-green-700"
+                                    )}
+                                    onClick={() => setStudentAttendance(prev => ({ ...prev, [student.id]: "present" }))}
+                                  >
+                                    <Check className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <Button
+                                    variant={studentAttendance[student.id] === "absent" ? "default" : "outline"}
+                                    size="icon"
+                                    className={cn(
+                                      "h-8 w-8",
+                                      studentAttendance[student.id] === "absent" && "bg-red-600 hover:bg-red-700"
+                                    )}
+                                    onClick={() => setStudentAttendance(prev => ({ ...prev, [student.id]: "absent" }))}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <Button
+                                    variant={studentAttendance[student.id] === "late" ? "default" : "outline"}
+                                    size="icon"
+                                    className={cn(
+                                      "h-8 w-8",
+                                      studentAttendance[student.id] === "late" && "bg-yellow-600 hover:bg-yellow-700"
+                                    )}
+                                    onClick={() => setStudentAttendance(prev => ({ ...prev, [student.id]: "late" }))}
+                                  >
+                                    <Clock className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <Button
+                                    variant={studentAttendance[student.id] === "excused" ? "default" : "outline"}
+                                    size="icon"
+                                    className={cn(
+                                      "h-8 w-8",
+                                      studentAttendance[student.id] === "excused" && "bg-blue-600 hover:bg-blue-700"
+                                    )}
+                                    onClick={() => setStudentAttendance(prev => ({ ...prev, [student.id]: "excused" }))}
+                                  >
+                                    <FileText className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+
+                        {/* Legend */}
+                        <div className="flex flex-wrap gap-4 pt-4 border-t text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className="h-3 w-3 rounded-full bg-green-600"></div>
+                            <span className="text-muted-foreground">Keldi</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="h-3 w-3 rounded-full bg-red-600"></div>
+                            <span className="text-muted-foreground">Kelmadi</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="h-3 w-3 rounded-full bg-yellow-600"></div>
+                            <span className="text-muted-foreground">Kechikdi</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="h-3 w-3 rounded-full bg-blue-600"></div>
+                            <span className="text-muted-foreground">Sababli</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   )
