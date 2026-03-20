@@ -33,6 +33,7 @@ import {
 import { format } from "date-fns"
 import { uz } from "date-fns/locale"
 import { cn } from "@/lib/utils"
+import { Input } from "@/components/ui/input"
 import {
   ArrowLeft,
   Phone,
@@ -52,6 +53,10 @@ import {
   Check,
   X,
   Save,
+  Plus,
+  Trash2,
+  Calculator,
+  BookOpen,
 } from "lucide-react"
 
 interface Staff {
@@ -111,6 +116,17 @@ interface StudentAttendanceRecord {
   date: string
   status: "present" | "absent" | "late" | "excused"
   notes: string | null
+}
+
+interface AssessmentTask {
+  id: string
+  name: string
+  maxScore: number
+}
+
+interface StudentScore {
+  studentId: string
+  scores: Record<string, number> // taskId -> score
 }
 
 const staffTypeLabels: Record<string, string> = {
@@ -195,6 +211,18 @@ export default function StaffProfilePage() {
   const [existingAttendance, setExistingAttendance] = useState<StudentAttendanceRecord[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [isLoadingStudents, setIsLoadingStudents] = useState(false)
+  
+  // Summative assessment states (for pedagogue only)
+  const [assessmentType, setAssessmentType] = useState<"bsb" | "chsb">("bsb")
+  const [assessmentQuarter, setAssessmentQuarter] = useState<string>("1")
+  const [assessmentClass, setAssessmentClass] = useState<string>("")
+  const [assessmentStudents, setAssessmentStudents] = useState<StudentInfo[]>([])
+  const [assessmentTasks, setAssessmentTasks] = useState<AssessmentTask[]>([
+    { id: "1", name: "1-topshiriq", maxScore: 10 }
+  ])
+  const [studentScores, setStudentScores] = useState<Record<string, Record<string, number>>>({})
+  const [isLoadingAssessment, setIsLoadingAssessment] = useState(false)
+  const [isSavingAssessment, setIsSavingAssessment] = useState(false)
 
   const supabase = createClient()
 
@@ -342,6 +370,157 @@ export default function StaffProfilePage() {
     if (newExisting) setExistingAttendance(newExisting)
     
     setIsSaving(false)
+  }
+
+  // Fetch students for assessment when class is selected
+  const fetchStudentsForAssessment = async (classId: string) => {
+    setIsLoadingAssessment(true)
+    const { data } = await supabase
+      .from("students")
+      .select("id, full_name, class_id, classes(name)")
+      .eq("class_id", classId)
+      .eq("status", "active")
+      .order("full_name")
+    
+    if (data) {
+      setAssessmentStudents(data)
+      // Initialize scores with 0 for all students and tasks
+      const initialScores: Record<string, Record<string, number>> = {}
+      data.forEach(s => {
+        initialScores[s.id] = {}
+        assessmentTasks.forEach(task => {
+          initialScores[s.id][task.id] = 0
+        })
+      })
+      setStudentScores(initialScores)
+    }
+    setIsLoadingAssessment(false)
+  }
+
+  // Handle assessment class selection
+  useEffect(() => {
+    if (assessmentClass) {
+      fetchStudentsForAssessment(assessmentClass)
+    }
+  }, [assessmentClass])
+
+  // Add new task
+  const addTask = () => {
+    const newId = String(assessmentTasks.length + 1)
+    const newTask: AssessmentTask = {
+      id: newId,
+      name: `${assessmentTasks.length + 1}-topshiriq`,
+      maxScore: 10
+    }
+    setAssessmentTasks([...assessmentTasks, newTask])
+    
+    // Add this task to all student scores
+    const updatedScores = { ...studentScores }
+    Object.keys(updatedScores).forEach(studentId => {
+      updatedScores[studentId][newId] = 0
+    })
+    setStudentScores(updatedScores)
+  }
+
+  // Remove task
+  const removeTask = (taskId: string) => {
+    if (assessmentTasks.length <= 1) return
+    setAssessmentTasks(assessmentTasks.filter(t => t.id !== taskId))
+    
+    // Remove this task from all student scores
+    const updatedScores = { ...studentScores }
+    Object.keys(updatedScores).forEach(studentId => {
+      delete updatedScores[studentId][taskId]
+    })
+    setStudentScores(updatedScores)
+  }
+
+  // Update task
+  const updateTask = (taskId: string, field: "name" | "maxScore", value: string | number) => {
+    setAssessmentTasks(assessmentTasks.map(t => 
+      t.id === taskId ? { ...t, [field]: value } : t
+    ))
+  }
+
+  // Update student score
+  const updateStudentScore = (studentId: string, taskId: string, score: number) => {
+    const task = assessmentTasks.find(t => t.id === taskId)
+    if (!task) return
+    
+    // Ensure score doesn't exceed max score
+    const validScore = Math.min(Math.max(0, score), task.maxScore)
+    
+    setStudentScores(prev => ({
+      ...prev,
+      [studentId]: {
+        ...prev[studentId],
+        [taskId]: validScore
+      }
+    }))
+  }
+
+  // Calculate total score for a student
+  const calculateTotalScore = (studentId: string) => {
+    const scores = studentScores[studentId] || {}
+    return Object.values(scores).reduce((sum, score) => sum + score, 0)
+  }
+
+  // Calculate max possible score
+  const calculateMaxScore = () => {
+    return assessmentTasks.reduce((sum, task) => sum + task.maxScore, 0)
+  }
+
+  // Calculate percentage
+  const calculatePercentage = (studentId: string) => {
+    const total = calculateTotalScore(studentId)
+    const max = calculateMaxScore()
+    if (max === 0) return 0
+    return Math.round((total / max) * 100)
+  }
+
+  // Get grade based on percentage
+  const getGradeFromPercentage = (percentage: number) => {
+    if (percentage >= 86) return { grade: 5, label: "A'lo" }
+    if (percentage >= 71) return { grade: 4, label: "Yaxshi" }
+    if (percentage >= 56) return { grade: 3, label: "Qoniqarli" }
+    return { grade: 2, label: "Qoniqarsiz" }
+  }
+
+  // Save assessment
+  const saveAssessment = async () => {
+    if (!assessmentClass || assessmentStudents.length === 0 || !staff?.subject_id) return
+    
+    setIsSavingAssessment(true)
+    
+    const gradeType = assessmentType === "bsb" 
+      ? `summative_${assessmentQuarter}` as "summative_1" | "summative_2" | "summative_3" | "summative_4"
+      : "final"
+    
+    // Delete existing grades for this assessment
+    await supabase
+      .from("grades")
+      .delete()
+      .eq("subject_id", staff.subject_id)
+      .eq("grade_type", gradeType)
+      .eq("quarter", parseInt(assessmentQuarter))
+      .in("student_id", assessmentStudents.map(s => s.id))
+    
+    // Insert new grades
+    const records = assessmentStudents.map(student => ({
+      student_id: student.id,
+      subject_id: staff.subject_id,
+      teacher_id: staff.id,
+      grade_type: gradeType,
+      score: calculateTotalScore(student.id),
+      max_score: calculateMaxScore(),
+      quarter: parseInt(assessmentQuarter),
+      academic_year: new Date().getFullYear().toString(),
+      notes: `Topshiriqlar: ${assessmentTasks.map(t => `${t.name}(${studentScores[student.id]?.[t.id] || 0}/${t.maxScore})`).join(", ")}`
+    }))
+    
+    await supabase.from("grades").insert(records)
+    
+    setIsSavingAssessment(false)
   }
 
   const formatDate = (dateStr: string | null) => {
@@ -539,6 +718,9 @@ export default function StaffProfilePage() {
           <TabsTrigger value="davomat">Davomat</TabsTrigger>
           {staff.staff_type === "pedagogue" && (
             <TabsTrigger value="yoklama">O'quvchilar yo'qlama</TabsTrigger>
+          )}
+          {staff.staff_type === "pedagogue" && (
+            <TabsTrigger value="summativ">Summativ baholash</TabsTrigger>
           )}
         </TabsList>
 
@@ -922,6 +1104,293 @@ export default function StaffProfilePage() {
                           </div>
                         </div>
                       </>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* Summativ baholash Tab (faqat pedagog uchun) */}
+        {staff.staff_type === "pedagogue" && (
+          <TabsContent value="summativ" className="space-y-4">
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <BookOpen className="h-5 w-5" />
+                  Summativ baholash - {staff.subjects?.name || "Fan"}
+                </CardTitle>
+                <CardDescription>
+                  BSB (Bosqichli Summativ Baholash) va CHSB (Chorak Summativ Baholash) ishlarini baholash
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Filters */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <label className="text-sm text-muted-foreground mb-2 block">Baholash turi</label>
+                    <Select value={assessmentType} onValueChange={(v: "bsb" | "chsb") => setAssessmentType(v)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="bsb">BSB (Bosqichli)</SelectItem>
+                        <SelectItem value="chsb">CHSB (Chorak)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div>
+                    <label className="text-sm text-muted-foreground mb-2 block">Chorak</label>
+                    <Select value={assessmentQuarter} onValueChange={setAssessmentQuarter}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">I chorak</SelectItem>
+                        <SelectItem value="2">II chorak</SelectItem>
+                        <SelectItem value="3">III chorak</SelectItem>
+                        <SelectItem value="4">IV chorak</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div>
+                    <label className="text-sm text-muted-foreground mb-2 block">Sinf</label>
+                    <Select value={assessmentClass} onValueChange={setAssessmentClass}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sinf tanlang" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teacherClasses.map((cls) => (
+                          <SelectItem key={cls.id} value={cls.id}>
+                            {cls.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="flex items-end">
+                    <Button 
+                      onClick={saveAssessment} 
+                      disabled={isSavingAssessment || !assessmentClass || assessmentStudents.length === 0}
+                      className="w-full"
+                    >
+                      {isSavingAssessment ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Saqlanmoqda...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          Saqlash
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {teacherClasses.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Sizga biriktirilgan sinflar topilmadi</p>
+                    <p className="text-sm">Dars jadvalida sinflar biriktirilishi kerak</p>
+                  </div>
+                )}
+
+                {/* Tasks Setup */}
+                {assessmentClass && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-medium flex items-center gap-2">
+                        <Calculator className="h-4 w-4" />
+                        Topshiriqlar ({assessmentTasks.length} ta)
+                      </h3>
+                      <Button variant="outline" size="sm" onClick={addTask}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Topshiriq qo'shish
+                      </Button>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {assessmentTasks.map((task, index) => (
+                        <div key={task.id} className="flex items-center gap-2 p-3 border rounded-lg bg-muted/30">
+                          <Input
+                            value={task.name}
+                            onChange={(e) => updateTask(task.id, "name", e.target.value)}
+                            className="flex-1"
+                            placeholder="Topshiriq nomi"
+                          />
+                          <Input
+                            type="number"
+                            value={task.maxScore}
+                            onChange={(e) => updateTask(task.id, "maxScore", parseInt(e.target.value) || 0)}
+                            className="w-20"
+                            min={1}
+                            max={100}
+                          />
+                          <span className="text-sm text-muted-foreground">ball</span>
+                          {assessmentTasks.length > 1 && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeTask(task.id)}
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <div className="text-sm text-muted-foreground">
+                      Maksimal ball: <span className="font-medium text-foreground">{calculateMaxScore()}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Students Grading Table */}
+                {assessmentClass && (
+                  <>
+                    {isLoadingAssessment ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                      </div>
+                    ) : assessmentStudents.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>Bu sinfda o'quvchilar topilmadi</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-12">#</TableHead>
+                              <TableHead className="min-w-[200px]">O'quvchi FISH</TableHead>
+                              {assessmentTasks.map((task) => (
+                                <TableHead key={task.id} className="text-center min-w-[100px]">
+                                  {task.name}
+                                  <div className="text-xs text-muted-foreground font-normal">
+                                    (max: {task.maxScore})
+                                  </div>
+                                </TableHead>
+                              ))}
+                              <TableHead className="text-center">Jami</TableHead>
+                              <TableHead className="text-center">%</TableHead>
+                              <TableHead className="text-center">Baho</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {assessmentStudents.map((student, index) => {
+                              const percentage = calculatePercentage(student.id)
+                              const gradeInfo = getGradeFromPercentage(percentage)
+                              return (
+                                <TableRow key={student.id}>
+                                  <TableCell className="text-muted-foreground">{index + 1}</TableCell>
+                                  <TableCell className="font-medium">{student.full_name}</TableCell>
+                                  {assessmentTasks.map((task) => (
+                                    <TableCell key={task.id} className="text-center">
+                                      <Input
+                                        type="number"
+                                        value={studentScores[student.id]?.[task.id] || 0}
+                                        onChange={(e) => updateStudentScore(student.id, task.id, parseInt(e.target.value) || 0)}
+                                        className="w-16 mx-auto text-center"
+                                        min={0}
+                                        max={task.maxScore}
+                                      />
+                                    </TableCell>
+                                  ))}
+                                  <TableCell className="text-center font-medium">
+                                    {calculateTotalScore(student.id)} / {calculateMaxScore()}
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <Badge className={cn(
+                                      percentage >= 86 ? "bg-green-500/20 text-green-400" :
+                                      percentage >= 71 ? "bg-blue-500/20 text-blue-400" :
+                                      percentage >= 56 ? "bg-yellow-500/20 text-yellow-400" :
+                                      "bg-red-500/20 text-red-400"
+                                    )}>
+                                      {percentage}%
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <Badge className={cn(
+                                      gradeInfo.grade === 5 ? "bg-green-500/20 text-green-400" :
+                                      gradeInfo.grade === 4 ? "bg-blue-500/20 text-blue-400" :
+                                      gradeInfo.grade === 3 ? "bg-yellow-500/20 text-yellow-400" :
+                                      "bg-red-500/20 text-red-400"
+                                    )}>
+                                      {gradeInfo.grade} ({gradeInfo.label})
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })}
+                          </TableBody>
+                        </Table>
+                        
+                        {/* Summary */}
+                        <div className="mt-4 p-4 bg-muted/30 rounded-lg">
+                          <h4 className="font-medium mb-3">Umumiy natijalar</h4>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Jami o'quvchilar:</span>
+                              <span className="ml-2 font-medium">{assessmentStudents.length}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">A'lo (86-100%):</span>
+                              <span className="ml-2 font-medium text-green-500">
+                                {assessmentStudents.filter(s => calculatePercentage(s.id) >= 86).length}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Yaxshi (71-85%):</span>
+                              <span className="ml-2 font-medium text-blue-500">
+                                {assessmentStudents.filter(s => {
+                                  const p = calculatePercentage(s.id)
+                                  return p >= 71 && p < 86
+                                }).length}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Qoniqarli (56-70%):</span>
+                              <span className="ml-2 font-medium text-yellow-500">
+                                {assessmentStudents.filter(s => {
+                                  const p = calculatePercentage(s.id)
+                                  return p >= 56 && p < 71
+                                }).length}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Qoniqarsiz (0-55%):</span>
+                              <span className="ml-2 font-medium text-red-500">
+                                {assessmentStudents.filter(s => calculatePercentage(s.id) < 56).length}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">O'rtacha ball:</span>
+                              <span className="ml-2 font-medium">
+                                {assessmentStudents.length > 0 
+                                  ? Math.round(assessmentStudents.reduce((sum, s) => sum + calculatePercentage(s.id), 0) / assessmentStudents.length)
+                                  : 0}%
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">O'zlashtirish:</span>
+                              <span className="ml-2 font-medium">
+                                {assessmentStudents.length > 0 
+                                  ? Math.round((assessmentStudents.filter(s => calculatePercentage(s.id) >= 56).length / assessmentStudents.length) * 100)
+                                  : 0}%
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </>
                 )}
