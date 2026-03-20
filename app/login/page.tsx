@@ -30,8 +30,6 @@ export default function LoginPage() {
     }
 
     try {
-      console.log("[v0] Login attempt:", username.toLowerCase().trim())
-      
       // Foydalanuvchini tekshirish
       const { data: user, error: userError } = await supabase
         .from("users")
@@ -39,11 +37,7 @@ export default function LoginPage() {
         .eq("username", username.toLowerCase().trim())
         .single()
 
-      console.log("[v0] User data:", user)
-      console.log("[v0] User error:", userError)
-
       if (userError || !user) {
-        console.log("[v0] Login failed - user not found")
         setError("Login yoki parol noto'g'ri")
         setIsLoading(false)
         return
