@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard,
   CalendarCheck,
-
+  MapPin,
   BookOpen,
   Heart,
   Users,
@@ -15,6 +15,7 @@ import {
   LogOut,
   GraduationCap,
   UserCog,
+  ClipboardList,
 } from "lucide-react"
 
 import {
@@ -32,67 +33,112 @@ import {
 } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
+// Yangi rollar
+type UserRole = 
+  | "admin" 
+  | "director" 
+  | "deputy_academic" 
+  | "deputy_education"
+  | "head_hr"
+  | "head_academic"
+  | "head_spiritual"
+  | "teacher"
+  | "accountant"
+  | "librarian"
+  | "technical"
+
 interface UserData {
   id: string
   username: string
   full_name: string
-  role: "admin" | "director" | "teacher"
+  role: UserRole
   phone?: string
   avatar_url?: string
 }
 
-const mainNavItems = [
+// Har bir menyu elementi uchun ruxsat etilgan rollar
+interface NavItem {
+  title: string
+  url: string
+  icon: typeof LayoutDashboard
+  roles?: UserRole[] // Agar belgilanmasa, hammaga ko'rinadi
+}
+
+const mainNavItems: NavItem[] = [
   {
     title: "Bosh sahifa",
     url: "/",
     icon: LayoutDashboard,
   },
   {
+    title: "GPS Davomat",
+    url: "/gps-davomat",
+    icon: MapPin,
+  },
+  {
     title: "Davomat",
     url: "/davomat",
     icon: CalendarCheck,
+    roles: ["admin", "director", "deputy_academic", "deputy_education", "head_hr", "head_academic"],
   },
-
+  {
+    title: "Topshiriqlar",
+    url: "/topshiriqlar",
+    icon: ClipboardList,
+  },
   {
     title: "O'quv bo'limi",
     url: "/oquv-bolimi",
     icon: BookOpen,
+    roles: ["admin", "director", "deputy_academic", "head_academic", "teacher"],
   },
   {
     title: "Ma'naviyat bo'limi",
     url: "/manaviyat",
     icon: Heart,
+    roles: ["admin", "director", "deputy_education", "head_spiritual", "teacher"],
   },
   {
     title: "Kadrlar bo'limi",
     url: "/kadrlar",
     icon: Users,
+    roles: ["admin", "director", "head_hr"],
   },
   {
     title: "Summativ baholash",
     url: "/summativ-baholash",
     icon: FileText,
+    roles: ["admin", "director", "deputy_academic", "head_academic", "teacher"],
   },
 ]
 
-const settingsNavItems = [
+const settingsNavItems: NavItem[] = [
   {
     title: "Foydalanuvchilar",
     url: "/foydalanuvchilar",
     icon: UserCog,
-    adminOnly: true,
+    roles: ["admin"],
   },
   {
     title: "Sozlamalar",
     url: "/sozlamalar",
     icon: Settings,
+    roles: ["admin", "director"],
   },
 ]
 
-const roleLabels: Record<string, string> = {
+const roleLabels: Record<UserRole, string> = {
   admin: "Administrator",
   director: "Direktor",
-  teacher: "O'qituvchi"
+  deputy_academic: "O'quv ishlari bo'yicha direktor o'rinbosari",
+  deputy_education: "Tarbiya ishlari bo'yicha direktor o'rinbosari",
+  head_hr: "Kadrlar bo'limi boshlig'i",
+  head_academic: "O'quv bo'limi boshlig'i",
+  head_spiritual: "Ma'naviyat bo'limi boshlig'i",
+  teacher: "O'qituvchi",
+  accountant: "Buxgalter",
+  librarian: "Kutubxonachi",
+  technical: "Texnik xodim",
 }
 
 export function AppSidebar() {
@@ -112,11 +158,17 @@ export function AppSidebar() {
     router.push("/login")
   }
 
-  // Filter settings items based on user role
-  const filteredSettingsItems = settingsNavItems.filter(item => {
-    if (item.adminOnly && user?.role !== "admin") return false
-    return true
-  })
+  // Filter nav items based on user role
+  const filterByRole = (items: NavItem[]) => {
+    return items.filter(item => {
+      if (!item.roles) return true // Agar roles belgilanmasa, hammaga ko'rinadi
+      if (!user?.role) return false
+      return item.roles.includes(user.role)
+    })
+  }
+
+  const filteredMainItems = filterByRole(mainNavItems)
+  const filteredSettingsItems = filterByRole(settingsNavItems)
 
   return (
     <Sidebar className="border-r border-sidebar-border">
@@ -145,7 +197,7 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNavItems.map((item) => {
+              {filteredMainItems.map((item) => {
                 const isActive = pathname === item.url
                 return (
                   <SidebarMenuItem key={item.url}>
