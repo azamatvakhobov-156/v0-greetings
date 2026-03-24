@@ -46,6 +46,7 @@ export default function RegisterPage() {
 
     try {
       const supabase = createClient()
+      console.log("[v0] Starting signup with email:", email.trim())
       
       // Supabase Auth bilan ro'yxatdan o'tish
       const { data, error: authError } = await supabase.auth.signUp({
@@ -60,7 +61,10 @@ export default function RegisterPage() {
         },
       })
 
+      console.log("[v0] Signup response:", { data, authError })
+
       if (authError) {
+        console.log("[v0] Auth error:", authError)
         if (authError.message.includes("User already registered")) {
           setError("Bu email allaqachon ro'yxatdan o'tgan")
         } else {
@@ -71,9 +75,11 @@ export default function RegisterPage() {
       }
 
       if (data.user) {
+        console.log("[v0] User created:", data.user.id)
         setSuccess(true)
       }
-    } catch {
+    } catch (err) {
+      console.log("[v0] Catch error:", err)
       setError("Xatolik yuz berdi. Qayta urinib ko'ring.")
     } finally {
       setIsLoading(false)
