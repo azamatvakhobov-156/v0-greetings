@@ -37,18 +37,26 @@ export default function LoginPage() {
         .eq("username", username.toLowerCase().trim())
         .single()
 
+      console.log("[v0] User query result:", { user, userError })
+
       if (userError || !user) {
+        console.log("[v0] User not found")
         setError("Login yoki parol noto'g'ri")
         setIsLoading(false)
         return
       }
 
+      console.log("[v0] Checking password:", { entered: password, stored: user.password_hash })
+
       // Parolni tekshirish
       if (user.password_hash !== password) {
+        console.log("[v0] Password mismatch")
         setError("Login yoki parol noto'g'ri")
         setIsLoading(false)
         return
       }
+
+      console.log("[v0] Password matched, logging in")
 
       // Aktiv emasligini tekshirish
       if (!user.is_active) {
