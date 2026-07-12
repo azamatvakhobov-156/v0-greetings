@@ -24,14 +24,18 @@ export async function GET() {
 export async function POST(request: Request) {
   const body = await request.json()
   
+  console.log("[v0] POST /api/staff - body:", body)
+  
   const { data, error } = await supabase
     .from("staff")
     .insert(body)
     .select("*, departments(name), subjects(name)")
     .single()
   
+  console.log("[v0] Insert result - data:", data, "error:", error)
+  
   if (error) {
-    console.error("Error creating staff:", error)
+    console.error("[v0] Error creating staff:", error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
   
