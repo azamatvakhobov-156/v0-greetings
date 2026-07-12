@@ -290,27 +290,36 @@ export default function KadrlarPage() {
     }
 
     try {
+      let response
       if (editingStaff) {
-        await fetch("/api/staff", {
+        response = await fetch("/api/staff", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: editingStaff.id, ...staffData })
         })
       } else {
-        await fetch("/api/staff", {
+        response = await fetch("/api/staff", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(staffData)
         })
       }
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error("[v0] API error:", errorData)
+        alert("Xodim saqlashda xato: " + (errorData.error || "Noma'lum xato"))
+        return
+      }
+      
+      setIsStaffModalOpen(false)
+      setEditingStaff(null)
+      setStaffForm({ full_name: "", position: "", department_id: "", phone: "", hire_date: "", staff_type: "technical", subject_id: "" })
+      await fetchStaff()
     } catch (error) {
-      console.error("Error saving staff:", error)
+      console.error("[v0] Error saving staff:", error)
+      alert("Xodim saqlashda xato: " + (error instanceof Error ? error.message : "Noma'lum xato"))
     }
-
-    setIsStaffModalOpen(false)
-    setEditingStaff(null)
-    setStaffForm({ full_name: "", position: "", department_id: "", phone: "", hire_date: "", staff_type: "technical", subject_id: "" })
-    await fetchStaff()
   }
 
   const handleEditStaff = (staffMember: Staff) => {
