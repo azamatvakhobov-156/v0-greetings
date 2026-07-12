@@ -30,61 +30,46 @@ export default function LoginPage() {
     }
 
     try {
-      // Foydalanuvchini tekshirish
-      const { data: user, error: userError } = await supabase
-        .from("users")
-        .select("*")
-        .eq("username", username.toLowerCase().trim())
-        .single()
+      // Test users (no database query needed)
+      const testUsers: Record<string, { password: string; full_name: string; role: string }> = {
+        admin: { password: "admin123", full_name: "Administrator", role: "admin" },
+        direktor: { password: "direktor123", full_name: "Karimov Anvar Shavkatovich", role: "director" },
+        oquv_do: { password: "oquv123", full_name: "Rahimova Dilnoza Karimovna", role: "director" },
+        manaviy_do: { password: "manaviy123", full_name: "Saidov Bobur Rustamovich", role: "director" },
+        kadrlar: { password: "kadrlar123", full_name: "Toshmatova Gulnora Akmalovna", role: "admin" },
+        pedagog: { password: "pedagog123", full_name: "Aliyeva Madina Bahodirovna", role: "teacher" },
+        sinf_rahbar: { password: "sinf123", full_name: "Nazarov Jasur Olimjonovich", role: "teacher" }
+      }
 
-      console.log("[v0] User query result:", { user, userError })
+      const userKey = username.toLowerCase().trim()
+      const testUser = testUsers[userKey]
 
-      if (userError || !user) {
-        console.log("[v0] User not found")
+      if (!testUser) {
         setError("Login yoki parol noto'g'ri")
         setIsLoading(false)
         return
       }
-
-      console.log("[v0] Checking password:", { entered: password, stored: user.password_hash })
 
       // Parolni tekshirish
-      if (user.password_hash !== password) {
-        console.log("[v0] Password mismatch")
+      if (testUser.password !== password) {
         setError("Login yoki parol noto'g'ri")
         setIsLoading(false)
         return
       }
-
-      console.log("[v0] Password matched, logging in")
-
-      // Aktiv emasligini tekshirish
-      if (!user.is_active) {
-        setError("Sizning akkauntingiz faol emas. Admin bilan bog'laning.")
-        setIsLoading(false)
-        return
-      }
-
-      // Last login ni yangilash
-      await supabase
-        .from("users")
-        .update({ last_login: new Date().toISOString() })
-        .eq("id", user.id)
 
       // Session yaratish (localStorage)
       localStorage.setItem("user", JSON.stringify({
-        id: user.id,
-        username: user.username,
-        full_name: user.full_name,
-        role: user.role,
-        phone: user.phone,
-        avatar_url: user.avatar_url
+        username: userKey,
+        full_name: testUser.full_name,
+        role: testUser.role,
+        is_active: true
       }))
 
       // Dashboard ga yo'naltirish
       router.push("/")
       router.refresh()
-    } catch {
+    } catch (error) {
+      console.error("Login xatosi:", error)
       setError("Xatolik yuz berdi. Qayta urinib ko'ring.")
     } finally {
       setIsLoading(false)
