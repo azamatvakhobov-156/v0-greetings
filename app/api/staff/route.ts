@@ -22,24 +22,47 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json()
-  
-  console.log("[v0] POST /api/staff - body:", body)
-  
-  const { data, error } = await supabase
-    .from("staff")
-    .insert(body)
-    .select("*, departments(name), subjects(name)")
-    .single()
-  
-  console.log("[v0] Insert result - data:", data, "error:", error)
-  
-  if (error) {
-    console.error("[v0] Error creating staff:", error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  try {
+    const body = await request.json()
+    
+    console.log("[v0] POST /api/staff - body:", body)
+    
+    // Insert without select first
+    const insertResult = await supabase
+      .from("staff")
+      .insert([body])
+    
+    console.log("[v0] Insert result:", insertResult)
+    
+    if (insertResult.error) {
+      console.error("[v0] Error creating staff:", insertResult.error)
+      return NextResponse.json({ error: insertResult.error.message, code: insertResult.error.code }, { status: 500 })
+    }
+    
+    // If insert was successful, return the inserted data
+    if (insertResult.data && insertResult.data.length > 0) {
+      const insertedId = insertResult.data[0].id
+      
+      // Fetch with relations
+      const { data: staffData, error: fetchError } = await supabase
+        .from("staff")
+        .select("*, departments(name), subjects(name)")
+        .eq("id", insertedId)
+        .single()
+      
+      if (fetchError) {
+        console.error("[v0] Error fetching inserted staff:", fetchError)
+        return NextResponse.json(insertResult.data[0])
+      }
+      
+      return NextResponse.json(staffData)
+    }
+    
+    return NextResponse.json(insertResult.data)
+  } catch (err: any) {
+    console.error("[v0] API POST error:", err)
+    return NextResponse.json({ error: err.message }, { status: 500 })
   }
-  
-  return NextResponse.json(data)
 }
 
 export async function PUT(request: Request) {
