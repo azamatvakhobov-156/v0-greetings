@@ -290,26 +290,19 @@ export default function KadrlarPage() {
     }
 
     try {
-      let response
       if (editingStaff) {
-        response = await fetch("/api/staff", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: editingStaff.id, ...staffData })
-        })
+        const { error } = await supabase
+          .from("staff")
+          .update(staffData)
+          .eq("id", editingStaff.id)
+        
+        if (error) throw error
       } else {
-        response = await fetch("/api/staff", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(staffData)
-        })
-      }
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        console.error("[v0] API error:", errorData)
-        alert("Xodim saqlashda xato: " + (errorData.error || "Noma'lum xato"))
-        return
+        const { error } = await supabase
+          .from("staff")
+          .insert(staffData)
+        
+        if (error) throw error
       }
       
       setIsStaffModalOpen(false)
@@ -338,10 +331,16 @@ export default function KadrlarPage() {
 
   const handleDeleteStaff = async (id: string) => {
     try {
-      await fetch(`/api/staff?id=${id}`, { method: "DELETE" })
+      const { error } = await supabase
+        .from("staff")
+        .delete()
+        .eq("id", id)
+      
+      if (error) throw error
       await fetchStaff()
     } catch (error) {
-      console.error("Error deleting staff:", error)
+      console.error("[v0] Error deleting staff:", error)
+      alert("Xodimni o'chirishda xato: " + (error instanceof Error ? error.message : "Noma'lum xato"))
     }
   }
 
