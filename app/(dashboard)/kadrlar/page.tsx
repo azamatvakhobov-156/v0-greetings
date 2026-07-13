@@ -223,13 +223,15 @@ export default function KadrlarPage() {
 
   const fetchStaff = async () => {
     try {
-      const response = await fetch("/api/staff")
-      const data = await response.json()
+      const { data } = await supabase
+        .from("staff")
+        .select("*, departments(name), subjects(name)")
+        .order("created_at", { ascending: false })
       if (Array.isArray(data)) {
         setStaff(data)
       }
     } catch (error) {
-      console.error("Error fetching staff:", error)
+      console.error("[v0] Error fetching staff:", error)
     }
   }
 
