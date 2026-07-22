@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { format } from "date-fns"
 import { uz } from "date-fns/locale"
-import { CalendarIcon, Check, X, Clock, FileText, Users, Briefcase } from "lucide-react"
+import { CalendarIcon, Check, X, Clock, FileText, Users, Briefcase, Loader2 } from "lucide-react"
 import { Header } from "@/components/dashboard/header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -31,9 +31,35 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
-import { classes, students, staff } from "@/lib/mock-data"
+import { createClient } from "@/lib/supabase/client"
 
 type AttendanceStatus = "present" | "absent" | "excused" | "late"
+
+interface ClassRow {
+  id: string
+  name: string
+  grade: number
+  section: string
+}
+
+interface StudentRow {
+  id: string
+  full_name: string
+  class_id: string | null
+}
+
+interface StaffRow {
+  id: string
+  full_name: string
+  position: string
+  department_id: string | null
+  departments?: { name: string } | null
+}
+
+interface DepartmentRow {
+  id: string
+  name: string
+}
 
 interface AttendanceRecord {
   id: string
@@ -69,52 +95,126 @@ const statusConfig: Record<
   },
 }
 
-const departments = [
-  { id: "all", name: "Barcha bo'limlar" },
-  { id: "O'quv", name: "O'quv bo'limi" },
-  { id: "Rahbariyat", name: "Rahbariyat" },
-  { id: "Ma'naviyat", name: "Ma'naviyat bo'limi" },
-  { id: "Kadrlar", name: "Kadrlar bo'limi" },
-  { id: "Xo'jalik", name: "Xo'jalik bo'limi" },
-]
-
 export default function DavomatPage() {
   const [date, setDate] = useState<Date>(new Date())
   const [activeTab, setActiveTab] = useState<"students" | "staff">("students")
-  
-  // O'quvchilar davomati
-  const [selectedClass, setSelectedClass] = useState<string>("1")
-  const [studentAttendance, setStudentAttendance] = useState<AttendanceRecord[]>(() => {
-    const classStudents = students.filter((s) => s.classId === "1")
-    return classStudents.map((s) => ({
-      id: s.id,
-      name: s.fullName,
-      status: "present" as AttendanceStatus,
-    }))
-  })
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState("")
 
-  // Xodimlar davomati
+  const [classes, setClasses] = useState<ClassRow[]>([])
+  const [departments, setDepartments] = useState<DepartmentRow[]>([])
+  const [allStaff, setAllStaff] = useState<StaffRow[]>([])
+
+  const [selectedClass, setSelectedClass] = useState<string>("")
+  const [studentAttendance, setStudentAttendance] = useState<AttendanceRecord[]>([])
+
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all")
-  const [staffAttendance, setStaffAttendance] = useState<AttendanceRecord[]>(() => {
-    return staff.map((s) => ({
-      id: s.id,
-      name: s.fullName,
-      status: "present" as AttendanceStatus,
-      position: s.position,
-      department: s.department,
-    }))
-  })
+  const [staffAttendance, setStaffAttendance] = useState<AttendanceRecord[]>([])
+
+  const supabase = createClient()
+  const dateStr = format(date, "yyyy-MM-dd")
+
+  useEffect(() => {
+    const fetchInitial = async () => {
+      setIsLoading(true)
+      const [classesRes, deptsRes, staffRes] = await Promise.all([
+        supabase.from("classes").select("id, name, grade, section").order("grade").order("section"),
+        supabase.from("departments").select("id, name").order("name"),
+        supabase.from("staff").select("id, full_name, position, department_id, departments(name)").order("full_name"),
+      ])
+      if (classesRes.data) {
+        setClasses(classesRes.data)
+        if (classesRes.data.length > 0) setSelectedClass(classesRes.data[0].id)
+      }
+      if (deptsRes.data) setDepartments(deptsRes.data)
+      if (staffRes.data) setAllStaff(staffRes.data as unknown as StaffRow[])
+      setIsLoading(false)
+    }
+    fetchInitial()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const fetchStudentAttendance = useCallback(
+    async (classId: string, forDate: string) => {
+      if (!classId) return
+      const { data: studentsData } = await supabase
+        .from("students")
+        .select("id, full_name, class_id")
+        .eq("class_id", classId)
+        .order("full_name")
+
+      const studentsList = (studentsData as StudentRow[]) || []
+      if (studentsList.length === 0) {
+        setStudentAttendance([])
+        return
+      }
+
+      const { data: attendanceData } = await supabase
+        .from("student_attendance")
+        .select("student_id, status")
+        .eq("date", forDate)
+        .in(
+          "student_id",
+          studentsList.map((s) => s.id)
+        )
+
+      const attendanceMap = new Map(
+        (attendanceData || []).map((a: { student_id: string; status: string }) => [a.student_id, a.status])
+      )
+
+      setStudentAttendance(
+        studentsList.map((s) => ({
+          id: s.id,
+          name: s.full_name,
+          status: (attendanceMap.get(s.id) as AttendanceStatus) || "present",
+        }))
+      )
+    },
+    [supabase]
+  )
+
+  const fetchStaffAttendance = useCallback(
+    async (forDate: string) => {
+      if (allStaff.length === 0) return
+      const { data: attendanceData } = await supabase
+        .from("staff_attendance")
+        .select("staff_id, status")
+        .eq("date", forDate)
+        .in(
+          "staff_id",
+          allStaff.map((s) => s.id)
+        )
+
+      const attendanceMap = new Map(
+        (attendanceData || []).map((a: { staff_id: string; status: string }) => [a.staff_id, a.status])
+      )
+
+      setStaffAttendance(
+        allStaff.map((s) => ({
+          id: s.id,
+          name: s.full_name,
+          status: (attendanceMap.get(s.id) as AttendanceStatus) || "present",
+          position: s.position,
+          department: s.departments?.name || "",
+        }))
+      )
+    },
+    [supabase, allStaff]
+  )
+
+  useEffect(() => {
+    if (selectedClass) fetchStudentAttendance(selectedClass, dateStr)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedClass, dateStr])
+
+  useEffect(() => {
+    if (allStaff.length > 0) fetchStaffAttendance(dateStr)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allStaff, dateStr])
 
   const handleClassChange = (classId: string) => {
     setSelectedClass(classId)
-    const classStudents = students.filter((s) => s.classId === classId)
-    setStudentAttendance(
-      classStudents.map((s) => ({
-        id: s.id,
-        name: s.fullName,
-        status: "present" as AttendanceStatus,
-      }))
-    )
   }
 
   const handleDepartmentChange = (departmentId: string) => {
@@ -133,14 +233,56 @@ export default function DavomatPage() {
     )
   }
 
+  const handleSaveStudentAttendance = async () => {
+    setIsSaving(true)
+    setSaveMessage("")
+    const rows = studentAttendance.map((a) => ({
+      student_id: a.id,
+      date: dateStr,
+      status: a.status,
+    }))
+    const { error } = await supabase
+      .from("student_attendance")
+      .upsert(rows, { onConflict: "student_id,date" })
+    setIsSaving(false)
+    if (error) {
+      console.error("[Davomat] Saqlashda xatolik:", error)
+      setSaveMessage("Xatolik: saqlanmadi — " + error.message)
+    } else {
+      setSaveMessage("Davomat muvaffaqiyatli saqlandi.")
+    }
+  }
+
+  const handleSaveStaffAttendance = async () => {
+    setIsSaving(true)
+    setSaveMessage("")
+    const rows = staffAttendance.map((a) => ({
+      staff_id: a.id,
+      date: dateStr,
+      status: a.status,
+    }))
+    const { error } = await supabase
+      .from("staff_attendance")
+      .upsert(rows, { onConflict: "staff_id,date" })
+    setIsSaving(false)
+    if (error) {
+      console.error("[Davomat] Saqlashda xatolik:", error)
+      setSaveMessage("Xatolik: saqlanmadi — " + error.message)
+    } else {
+      setSaveMessage("Davomat muvaffaqiyatli saqlandi.")
+    }
+  }
+
   const selectedClassName = classes.find((c) => c.id === selectedClass)?.name || ""
 
-  // Filtered staff by department
-  const filteredStaff = selectedDepartment === "all" 
-    ? staffAttendance 
-    : staffAttendance.filter(s => s.department === selectedDepartment)
+  const filteredStaff =
+    selectedDepartment === "all"
+      ? staffAttendance
+      : staffAttendance.filter((s) => {
+          const staffMember = allStaff.find((m) => m.id === s.id)
+          return staffMember?.department_id === selectedDepartment
+        })
 
-  // Stats calculation
   const studentStats = {
     present: studentAttendance.filter((a) => a.status === "present").length,
     absent: studentAttendance.filter((a) => a.status === "absent").length,
@@ -155,7 +297,13 @@ export default function DavomatPage() {
     late: filteredStaff.filter((a) => a.status === "late").length,
   }
 
-  const currentStats = activeTab === "students" ? studentStats : staffStats
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
 
   return (
     <>
@@ -165,7 +313,6 @@ export default function DavomatPage() {
       />
 
       <main className="flex-1 p-6 space-y-6">
-        {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "students" | "staff")}>
           <div className="flex flex-wrap items-center justify-between gap-4">
             <TabsList className="bg-secondary">
@@ -179,7 +326,6 @@ export default function DavomatPage() {
               </TabsTrigger>
             </TabsList>
 
-            {/* Sana tanlash */}
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -208,9 +354,7 @@ export default function DavomatPage() {
             </Popover>
           </div>
 
-          {/* O'quvchilar davomati */}
           <TabsContent value="students" className="space-y-6 mt-6">
-            {/* Filtrlar */}
             <div className="flex flex-wrap gap-4">
               <Select value={selectedClass} onValueChange={handleClassChange}>
                 <SelectTrigger className="w-[180px]">
@@ -225,10 +369,18 @@ export default function DavomatPage() {
                 </SelectContent>
               </Select>
 
-              <Button>Saqlash</Button>
+              <Button onClick={() => handleSaveStudentAttendance()} disabled={isSaving}>
+                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Saqlash
+              </Button>
             </div>
 
-            {/* Statistika */}
+            {saveMessage && (
+              <p className="text-sm text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
+                {saveMessage}
+              </p>
+            )}
+
             <div className="grid gap-4 md:grid-cols-4">
               <Card className="bg-card border-border">
                 <CardContent className="p-4">
@@ -284,7 +436,6 @@ export default function DavomatPage() {
               </Card>
             </div>
 
-            {/* O'quvchilar jadvali */}
             <Card className="bg-card border-border">
               <CardHeader>
                 <CardTitle className="text-base">
@@ -302,6 +453,13 @@ export default function DavomatPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    {studentAttendance.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                          Bu sinfda o&apos;quvchilar topilmadi
+                        </TableCell>
+                      </TableRow>
+                    )}
                     {studentAttendance.map((student, index) => {
                       const config = statusConfig[student.status]
                       const StatusIcon = config.icon
@@ -350,15 +508,14 @@ export default function DavomatPage() {
             </Card>
           </TabsContent>
 
-          {/* Xodimlar davomati */}
           <TabsContent value="staff" className="space-y-6 mt-6">
-            {/* Filtrlar */}
             <div className="flex flex-wrap gap-4">
               <Select value={selectedDepartment} onValueChange={handleDepartmentChange}>
                 <SelectTrigger className="w-[220px]">
                   <SelectValue placeholder="Bo'lim tanlang" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="all">Barcha bo&apos;limlar</SelectItem>
                   {departments.map((dept) => (
                     <SelectItem key={dept.id} value={dept.id}>
                       {dept.name}
@@ -367,10 +524,18 @@ export default function DavomatPage() {
                 </SelectContent>
               </Select>
 
-              <Button>Saqlash</Button>
+              <Button onClick={() => handleSaveStaffAttendance()} disabled={isSaving}>
+                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Saqlash
+              </Button>
             </div>
 
-            {/* Statistika */}
+            {saveMessage && (
+              <p className="text-sm text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
+                {saveMessage}
+              </p>
+            )}
+
             <div className="grid gap-4 md:grid-cols-4">
               <Card className="bg-card border-border">
                 <CardContent className="p-4">
@@ -426,11 +591,10 @@ export default function DavomatPage() {
               </Card>
             </div>
 
-            {/* Xodimlar jadvali */}
             <Card className="bg-card border-border">
               <CardHeader>
                 <CardTitle className="text-base">
-                  {selectedDepartment === "all" ? "Barcha xodimlar" : departments.find(d => d.id === selectedDepartment)?.name} - {format(date, "d MMMM yyyy", { locale: uz })}
+                  {selectedDepartment === "all" ? "Barcha xodimlar" : departments.find((d) => d.id === selectedDepartment)?.name} - {format(date, "d MMMM yyyy", { locale: uz })}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -446,6 +610,13 @@ export default function DavomatPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    {filteredStaff.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                          Xodimlar topilmadi
+                        </TableCell>
+                      </TableRow>
+                    )}
                     {filteredStaff.map((staffMember, index) => {
                       const config = statusConfig[staffMember.status]
                       const StatusIcon = config.icon
