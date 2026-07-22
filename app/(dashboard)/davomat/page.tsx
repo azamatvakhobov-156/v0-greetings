@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { format } from "date-fns"
 import { uz } from "date-fns/locale"
-import { CalendarIcon, Check, X, Clock, FileText, Users, Briefcase, Loader2 } from "lucide-react"
+import { CalendarIcon, Check, X, Clock, FileText, Users, Briefcase, Loader2, ScanFace } from "lucide-react"
 import { Header } from "@/components/dashboard/header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -67,6 +67,9 @@ interface AttendanceRecord {
   status: AttendanceStatus
   position?: string
   department?: string
+  source: "manual" | "faceid"
+  checkInTime?: string | null
+  checkOutTime?: string | null
 }
 
 const statusConfig: Record<
@@ -152,7 +155,7 @@ export default function DavomatPage() {
 
       const { data: attendanceData } = await supabase
         .from("student_attendance")
-        .select("student_id, status")
+        .select("student_id, status, source, check_in_time, check_out_time")
         .eq("date", forDate)
         .in(
           "student_id",
@@ -160,15 +163,21 @@ export default function DavomatPage() {
         )
 
       const attendanceMap = new Map(
-        (attendanceData || []).map((a: { student_id: string; status: string }) => [a.student_id, a.status])
+        (attendanceData || []).map((a) => [a.student_id, a])
       )
 
       setStudentAttendance(
-        studentsList.map((s) => ({
-          id: s.id,
-          name: s.full_name,
-          status: (attendanceMap.get(s.id) as AttendanceStatus) || "present",
-        }))
+        studentsList.map((s) => {
+          const rec = attendanceMap.get(s.id)
+          return {
+            id: s.id,
+            name: s.full_name,
+            status: (rec?.status as AttendanceStatus) || "present",
+            source: (rec?.source as "manual" | "faceid") || "manual",
+            checkInTime: rec?.check_in_time || null,
+            checkOutTime: rec?.check_out_time || null,
+          }
+        })
       )
     },
     [supabase]
@@ -179,7 +188,7 @@ export default function DavomatPage() {
       if (allStaff.length === 0) return
       const { data: attendanceData } = await supabase
         .from("staff_attendance")
-        .select("staff_id, status")
+        .select("staff_id, status, source, check_in_time, check_out_time")
         .eq("date", forDate)
         .in(
           "staff_id",
@@ -187,17 +196,23 @@ export default function DavomatPage() {
         )
 
       const attendanceMap = new Map(
-        (attendanceData || []).map((a: { staff_id: string; status: string }) => [a.staff_id, a.status])
+        (attendanceData || []).map((a) => [a.staff_id, a])
       )
 
       setStaffAttendance(
-        allStaff.map((s) => ({
-          id: s.id,
-          name: s.full_name,
-          status: (attendanceMap.get(s.id) as AttendanceStatus) || "present",
-          position: s.position,
-          department: s.departments?.name || "",
-        }))
+        allStaff.map((s) => {
+          const rec = attendanceMap.get(s.id)
+          return {
+            id: s.id,
+            name: s.full_name,
+            status: (rec?.status as AttendanceStatus) || "present",
+            position: s.position,
+            department: s.departments?.name || "",
+            source: (rec?.source as "manual" | "faceid") || "manual",
+            checkInTime: rec?.check_in_time || null,
+            checkOutTime: rec?.check_out_time || null,
+          }
+        })
       )
     },
     [supabase, allStaff]
@@ -449,13 +464,15 @@ export default function DavomatPage() {
                       <TableHead className="w-12">#</TableHead>
                       <TableHead>O&apos;quvchi</TableHead>
                       <TableHead className="text-center">Holat</TableHead>
+                      <TableHead className="text-center">Kirish / Chiqish</TableHead>
+                      <TableHead className="text-center">Manba</TableHead>
                       <TableHead className="text-right">Amallar</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {studentAttendance.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                           Bu sinfda o&apos;quvchilar topilmadi
                         </TableCell>
                       </TableRow>
@@ -476,6 +493,19 @@ export default function DavomatPage() {
                               <StatusIcon className="mr-1 h-3 w-3" />
                               {config.label}
                             </Badge>
+                          </TableCell>
+                          <TableCell className="text-center text-sm text-muted-foreground">
+                            {student.checkInTime || "—"} / {student.checkOutTime || "—"}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {student.source === "faceid" ? (
+                              <Badge variant="secondary" className="bg-chart-5/10 text-chart-5">
+                                <ScanFace className="mr-1 h-3 w-3" />
+                                FaceID
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Qo&apos;lda</span>
+                            )}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
@@ -606,13 +636,15 @@ export default function DavomatPage() {
                       <TableHead>Lavozim</TableHead>
                       <TableHead>Bo&apos;lim</TableHead>
                       <TableHead className="text-center">Holat</TableHead>
+                      <TableHead className="text-center">Kirish / Chiqish</TableHead>
+                      <TableHead className="text-center">Manba</TableHead>
                       <TableHead className="text-right">Amallar</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredStaff.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                           Xodimlar topilmadi
                         </TableCell>
                       </TableRow>
@@ -641,6 +673,19 @@ export default function DavomatPage() {
                               <StatusIcon className="mr-1 h-3 w-3" />
                               {config.label}
                             </Badge>
+                          </TableCell>
+                          <TableCell className="text-center text-sm text-muted-foreground">
+                            {staffMember.checkInTime || "—"} / {staffMember.checkOutTime || "—"}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {staffMember.source === "faceid" ? (
+                              <Badge variant="secondary" className="bg-chart-5/10 text-chart-5">
+                                <ScanFace className="mr-1 h-3 w-3" />
+                                FaceID
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Qo&apos;lda</span>
+                            )}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
