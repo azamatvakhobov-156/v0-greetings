@@ -45,19 +45,30 @@ const chartConfig = {
 
 const dayNames = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"]
 
+interface WeeklyAttendancePoint {
+  day: string
+  present: number
+  absent: number
+}
+
+interface ClassPerformancePoint {
+  class: string
+  average: number
+}
+
+interface RiskDistributionPoint {
+  name: string
+  value: number
+  color: string
+}
+
 export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [dashboardStats, setDashboardStats] = useState<StatCardData[]>([])
   const [aiInsights, setAiInsights] = useState<AIInsight[]>([])
-  const [weeklyAttendanceData, setWeeklyAttendanceData] = useState
-    { day: string; present: number; absent: number }[]
-  >([])
-  const [classPerformanceData, setClassPerformanceData] = useState
-    { class: string; average: number }[]
-  >([])
-  const [riskDistribution, setRiskDistribution] = useState
-    { name: string; value: number; color: string }[]
-  >([])
+  const [weeklyAttendanceData, setWeeklyAttendanceData] = useState<WeeklyAttendancePoint[]>([])
+  const [classPerformanceData, setClassPerformanceData] = useState<ClassPerformancePoint[]>([])
+  const [riskDistribution, setRiskDistribution] = useState<RiskDistributionPoint[]>([])
 
   const supabase = createClient()
 
