@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   BookOpen,
   Users,
@@ -8,6 +8,7 @@ import {
   Plus,
   Search,
   MoreHorizontal,
+  Loader2,
 } from "lucide-react"
 import { Header } from "@/components/dashboard/header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -29,10 +30,117 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { classes, subjects, students } from "@/lib/mock-data"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { createClient } from "@/lib/supabase/client"
+
+interface ClassRow {
+  id: string
+  name: string
+  grade: number
+  section: string
+  student_count: number
+  studentsCount: number
+  averageGrade: number
+  attendanceRate: number
+}
+
+interface SubjectRow {
+  id: string
+  name: string
+  description: string | null
+  lessonsCount: number
+}
 
 export default function OquvBolimiPage() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [isLoading, setIsLoading] = useState(true)
+  const [classes, setClasses] = useState<ClassRow[]>([])
+  const [subjects, setSubjects] = useState<SubjectRow[]>([])
+  const [isClassModalOpen, setIsClassModalOpen] = useState(false)
+  const [classForm, setClassForm] = useState({ name: "", grade: "1", section: "A" })
+  const [isSaving, setIsSaving] = useState(false)
+
+  const supabase = createClient()
+
+  const fetchData = async () => {
+    setIsLoading(true)
+    const [classesRes, subjectsRes, studentsRes, gradesRes, attendanceRes, scheduleRes] =
+      await Promise.all([
+        supabase.from("classes").select("id, name, grade, section, student_count").order("grade").order("section"),
+        supabase.from("subjects").select("id, name, description").order("name"),
+        supabase.from("students").select("id, class_id"),
+        supabase.from("grades").select("student_id, score"),
+        supabase.from("student_attendance").select("student_id, status"),
+        supabase.from("schedule").select("id, subject_id"),
+      ])
+
+    const studentsList = studentsRes.data || []
+    const grades = gradesRes.data || []
+    const attendance = attendanceRes.data || []
+    const schedule = scheduleRes.data || []
+
+    const classesWithStats: ClassRow[] = (classesRes.data || []).map((cls) => {
+      const classStudentIds = studentsList
+        .filter((s) => s.class_id === cls.id)
+        .map((s) => s.id)
+      const classGrades = grades.filter((g) => classStudentIds.includes(g.student_id))
+      const avgGrade =
+        classGrades.length > 0
+          ? classGrades.reduce((acc, g) => acc + Number(g.score), 0) / classGrades.length / 20
+          : 0
+      const classAttendance = attendance.filter((a) => classStudentIds.includes(a.student_id))
+      const presentCount = classAttendance.filter((a) => a.status === "present").length
+      const attendanceRate =
+        classAttendance.length > 0 ? Math.round((presentCount / classAttendance.length) * 100) : 0
+
+      return {
+        ...cls,
+        studentsCount: classStudentIds.length || cls.student_count,
+        averageGrade: avgGrade,
+        attendanceRate,
+      }
+    })
+
+    const subjectsWithStats: SubjectRow[] = (subjectsRes.data || []).map((subj) => ({
+      ...subj,
+      lessonsCount: schedule.filter((s) => s.subject_id === subj.id).length,
+    }))
+
+    setClasses(classesWithStats)
+    setSubjects(subjectsWithStats)
+    setIsLoading(false)
+  }
+
+  useEffect(() => {
+    fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleSaveClass = async () => {
+    if (!classForm.name) return
+    setIsSaving(true)
+    await supabase.from("classes").insert({
+      name: classForm.name,
+      grade: Number(classForm.grade),
+      section: classForm.section,
+    })
+    setIsSaving(false)
+    setIsClassModalOpen(false)
+    setClassForm({ name: "", grade: "1", section: "A" })
+    fetchData()
+  }
+
+  const handleDeleteClass = async (id: string) => {
+    await supabase.from("classes").delete().eq("id", id)
+    fetchData()
+  }
 
   const filteredClasses = classes.filter((cls) =>
     cls.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -44,7 +152,17 @@ export default function OquvBolimiPage() {
 
   const totalStudents = classes.reduce((acc, cls) => acc + cls.studentsCount, 0)
   const averageGrade =
-    classes.reduce((acc, cls) => acc + cls.averageGrade, 0) / classes.length
+    classes.length > 0
+      ? classes.reduce((acc, cls) => acc + cls.averageGrade, 0) / classes.length
+      : 0
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
 
   return (
     <>
@@ -114,11 +232,57 @@ export default function OquvBolimiPage() {
               className="pl-9"
             />
           </div>
-          <Button>
+          <Button onClick={() => setIsClassModalOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            Yangi qo&apos;shish
+            Yangi sinf qo&apos;shish
           </Button>
         </div>
+
+        <Dialog open={isClassModalOpen} onOpenChange={setIsClassModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Yangi sinf qo&apos;shish</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Sinf nomi</Label>
+                <Input
+                  placeholder="Masalan: 5-A"
+                  value={classForm.name}
+                  onChange={(e) => setClassForm((p) => ({ ...p, name: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Sinf raqami</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={11}
+                    value={classForm.grade}
+                    onChange={(e) => setClassForm((p) => ({ ...p, grade: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Bo&apos;lim (A, B...)</Label>
+                  <Input
+                    value={classForm.section}
+                    onChange={(e) => setClassForm((p) => ({ ...p, section: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsClassModalOpen(false)}>
+                Bekor qilish
+              </Button>
+              <Button onClick={handleSaveClass} disabled={isSaving}>
+                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Saqlash
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Tablar */}
         <Tabs defaultValue="classes" className="space-y-4">
@@ -138,7 +302,6 @@ export default function OquvBolimiPage() {
                   <TableHeader>
                     <TableRow className="border-border">
                       <TableHead>Sinf</TableHead>
-                      <TableHead>Sinf rahbari</TableHead>
                       <TableHead className="text-center">O&apos;quvchilar</TableHead>
                       <TableHead className="text-center">O&apos;rtacha ball</TableHead>
                       <TableHead className="text-center">Davomat</TableHead>
@@ -151,7 +314,6 @@ export default function OquvBolimiPage() {
                         <TableCell className="font-medium">
                           {cls.name}
                         </TableCell>
-                        <TableCell>{cls.teacherName}</TableCell>
                         <TableCell className="text-center">
                           {cls.studentsCount}
                         </TableCell>
@@ -193,9 +355,10 @@ export default function OquvBolimiPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem>Ko&apos;rish</DropdownMenuItem>
-                              <DropdownMenuItem>Tahrirlash</DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive">
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => handleDeleteClass(cls.id)}
+                              >
                                 O&apos;chirish
                               </DropdownMenuItem>
                             </DropdownMenuContent>
@@ -219,8 +382,8 @@ export default function OquvBolimiPage() {
                   <TableHeader>
                     <TableRow className="border-border">
                       <TableHead>Fan nomi</TableHead>
-                      <TableHead>O&apos;qituvchi</TableHead>
-                      <TableHead className="text-center">Haftalik soat</TableHead>
+                      <TableHead>Tavsif</TableHead>
+                      <TableHead className="text-center">Haftalik darslar</TableHead>
                       <TableHead className="text-right">Amallar</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -230,10 +393,10 @@ export default function OquvBolimiPage() {
                         <TableCell className="font-medium">
                           {subj.name}
                         </TableCell>
-                        <TableCell>{subj.teacherName}</TableCell>
+                        <TableCell className="text-muted-foreground">{subj.description}</TableCell>
                         <TableCell className="text-center">
                           <Badge variant="secondary">
-                            {subj.hoursPerWeek} soat
+                            {subj.lessonsCount} dars
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
