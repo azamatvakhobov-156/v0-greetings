@@ -102,7 +102,7 @@ export default function OquvBolimiPage() {
 
       return {
         ...cls,
-        studentsCount: classStudentIds.length || cls.student_count,
+       studentsCount: classStudentIds.length,
         averageGrade: avgGrade,
         attendanceRate,
       }
