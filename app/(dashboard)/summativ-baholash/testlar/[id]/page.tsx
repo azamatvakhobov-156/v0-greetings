@@ -34,6 +34,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+} from "@/components/ui/dialog"
+import { createClient } from "@/lib/supabase/client"
 
 type QuestionType = "multiple_choice" | "true_false" | "short_answer" | "free_response"
 
