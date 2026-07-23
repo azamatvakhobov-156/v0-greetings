@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { RoleGuard } from "@/components/dashboard/role-guard"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -572,6 +573,7 @@ export default function KadrlarPage() {
   }
 
   return (
+    <RoleGuard allowedRoles={["admin", "director"]}>
     <div className="space-y-6 p-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
@@ -1297,5 +1299,6 @@ export default function KadrlarPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </RoleGuard>
   )
 }
