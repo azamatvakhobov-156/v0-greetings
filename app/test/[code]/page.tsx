@@ -89,6 +89,16 @@ export default function StudentTestPage({ params }: { params: Promise<{ code: st
       ])
       setStudents(studentsRes.data || [])
       setQuestions((questionsRes.data as Question[]) || [])
+
+      const studentSessionStr = localStorage.getItem("student")
+      if (studentSessionStr) {
+        const session = JSON.parse(studentSessionStr)
+        if (session.class_id === assessmentData.class_id) {
+          setSelectedStudent(session.id)
+          setView("pick_student")
+          return
+        }
+      }
       setView("pick_student")
     }
     load()
