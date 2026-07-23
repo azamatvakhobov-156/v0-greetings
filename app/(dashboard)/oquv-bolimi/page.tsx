@@ -106,6 +106,9 @@ export default function OquvBolimiPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [importMessage, setImportMessage] = useState("")
+  const [newCredentials, setNewCredentials] = useState<{ name: string; username: string; password: string } | null>(
+    null
+  )
   const photoInputRef = useRef<HTMLInputElement>(null)
   const excelInputRef = useRef<HTMLInputElement>(null)
 
@@ -230,16 +233,32 @@ export default function OquvBolimiPage() {
       setIsUploadingPhoto(false)
     }
 
-    await supabase.from("students").insert({
+    const baseUsername = studentForm.full_name
+      .trim()
+      .split(/\s+/)[0]
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "")
+    const randomSuffix = Math.floor(100 + Math.random() * 900)
+    const username = `${baseUsername || "talaba"}${randomSuffix}`
+    const password = String(Math.floor(100000 + Math.random() * 900000))
+
+    const { error } = await supabase.from("students").insert({
       full_name: studentForm.full_name,
       class_id: studentForm.class_id,
       gender: studentForm.gender,
       parent_name: studentForm.parent_name || null,
       parent_phone: studentForm.parent_phone || null,
       photo_url,
+      username,
+      password_hash: password,
     })
     setIsSaving(false)
+    if (error) {
+      setImportMessage("Xatolik: o'quvchi qo'shilmadi - " + error.message)
+      return
+    }
     setIsStudentModalOpen(false)
+    setNewCredentials({ name: studentForm.full_name, username, password })
     setStudentForm({
       full_name: "",
       class_id: "",
@@ -884,6 +903,37 @@ export default function OquvBolimiPage() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        <Dialog open={!!newCredentials} onOpenChange={(open) => !open && setNewCredentials(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>O&apos;quvchi qo&apos;shildi</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                {newCredentials?.name} uchun tizimga kirish ma&apos;lumotlari yaratildi. Buni o&apos;quvchi/ota-onaga
+                yetkazing — bu ma&apos;lumot faqat shu safar ko&apos;rsatiladi.
+              </p>
+              <div className="bg-muted/50 rounded-md p-4 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Login:</span>
+                  <span className="font-mono font-semibold">{newCredentials?.username}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Parol:</span>
+                  <span className="font-mono font-semibold">{newCredentials?.password}</span>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                O&apos;quvchi shu login/parol bilan{" "}
+                <span className="font-mono">156-maktab.uz/talaba/login</span> orqali kiradi.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setNewCredentials(null)}>Tushunarli</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </main>
     </>
   )
