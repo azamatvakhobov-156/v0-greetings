@@ -67,6 +67,7 @@ const mainNavItems = [
     title: "Kadrlar bo'limi",
     url: "/kadrlar",
     icon: Users,
+    roles: ["admin", "director"],
   },
   {
     title: "Summativ baholash",
@@ -112,7 +113,12 @@ export function AppSidebar() {
     router.push("/login")
   }
 
-  // Filter settings items based on user role
+  // Filter nav items based on user role
+  const filteredMainItems = mainNavItems.filter(item => {
+    if (item.roles && user?.role && !item.roles.includes(user.role)) return false
+    return true
+  })
+
   const filteredSettingsItems = settingsNavItems.filter(item => {
     if (item.adminOnly && user?.role !== "admin") return false
     return true
@@ -145,7 +151,7 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNavItems.map((item) => {
+              {filteredMainItems.map((item) => {
                 const isActive = pathname === item.url
                 return (
                   <SidebarMenuItem key={item.url}>
