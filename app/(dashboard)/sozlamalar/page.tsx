@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { useSidebar } from "@/components/ui/sidebar"
 import { createClient } from "@/lib/supabase/client"
 
 interface SessionUser {
@@ -56,6 +57,7 @@ export default function SozlamalarPage() {
   const [passwordMessage, setPasswordMessage] = useState("")
 
   const supabase = createClient()
+  const { state: sidebarState, toggleSidebar } = useSidebar()
 
   useEffect(() => {
     const userStr = localStorage.getItem("user")
@@ -362,47 +364,47 @@ export default function SozlamalarPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Mavzu</label>
-                    <Select defaultValue="dark">
+                    <Select value="dark" disabled>
                       <SelectTrigger className="w-[200px]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="light">Yorug&apos;</SelectItem>
                         <SelectItem value="dark">Qorong&apos;u</SelectItem>
-                        <SelectItem value="system">Tizim</SelectItem>
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Hozircha tizim faqat qorong&apos;u mavzuda ishlaydi. Boshqa mavzular tez orada qo&apos;shiladi.
+                    </p>
                   </div>
 
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Til</label>
-                    <Select defaultValue="uz">
+                    <Select value="uz" disabled>
                       <SelectTrigger className="w-[200px]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="uz">O&apos;zbek</SelectItem>
-                        <SelectItem value="ru">Русский</SelectItem>
-                        <SelectItem value="en">English</SelectItem>
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Tizim hozircha faqat o&apos;zbek tilida ishlaydi. Rus va ingliz tillari tarjimasi tez orada qo&apos;shiladi.
+                    </p>
                   </div>
 
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-medium">Ixcham sidebar</h3>
                       <p className="text-sm text-muted-foreground">
-                        Sidebar avtomatik yig&apos;iladi
+                        Yon panel doim yig&apos;ilgan holatda ochiladi
                       </p>
                     </div>
-                    <Switch />
+                    <Switch
+                      checked={sidebarState === "collapsed"}
+                      onCheckedChange={() => toggleSidebar()}
+                    />
                   </div>
                 </div>
-
-                <Button>
-                  <Save className="mr-2 h-4 w-4" />
-                  Saqlash
-                </Button>
               </CardContent>
             </Card>
           </TabsContent>
