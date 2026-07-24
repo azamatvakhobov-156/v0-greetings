@@ -163,6 +163,15 @@ const statusColors: Record<string, string> = {
 
 export default function KadrlarPage() {
   const [activeTab, setActiveTab] = useState("xodimlar")
+  const [canAssignTasks, setCanAssignTasks] = useState(false)
+
+  useEffect(() => {
+    const userStr = localStorage.getItem("user")
+    if (userStr) {
+      const user = JSON.parse(userStr)
+      setCanAssignTasks(["admin", "director", "deputy_director"].includes(user.role))
+    }
+  }, [])
   const [staff, setStaff] = useState<Staff[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
@@ -573,7 +582,7 @@ export default function KadrlarPage() {
   }
 
   return (
-    <RoleGuard allowedRoles={["admin", "director"]}>
+    <RoleGuard allowedRoles={["admin", "director", "deputy_director"]}>
     <div className="space-y-6 p-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
@@ -900,6 +909,7 @@ export default function KadrlarPage() {
                       <SelectItem value="cancelled">Bekor qilindi</SelectItem>
                     </SelectContent>
                   </Select>
+                  {canAssignTasks && (
                   <Dialog open={isTaskModalOpen} onOpenChange={(open) => {
                     setIsTaskModalOpen(open)
                     if (!open) {
@@ -1055,6 +1065,7 @@ export default function KadrlarPage() {
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
+                  )}
                 </div>
               </div>
             </CardHeader>
