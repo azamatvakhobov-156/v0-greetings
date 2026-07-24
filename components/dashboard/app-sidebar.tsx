@@ -36,7 +36,7 @@ interface UserData {
   id: string
   username: string
   full_name: string
-  role: "admin" | "director" | "teacher"
+  role: "admin" | "director" | "deputy_director" | "teacher"
   phone?: string
   avatar_url?: string
 }
@@ -67,7 +67,7 @@ const mainNavItems = [
     title: "Kadrlar bo'limi",
     url: "/kadrlar",
     icon: Users,
-    roles: ["admin", "director"],
+    roles: ["admin", "director", "deputy_director"],
   },
   {
     title: "Summativ baholash",
@@ -93,6 +93,7 @@ const settingsNavItems = [
 const roleLabels: Record<string, string> = {
   admin: "Administrator",
   director: "Direktor",
+  deputy_director: "Direktor o'rinbosari",
   teacher: "O'qituvchi"
 }
 
