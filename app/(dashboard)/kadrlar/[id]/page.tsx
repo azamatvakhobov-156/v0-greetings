@@ -149,8 +149,30 @@ export default function StaffProfilePage() {
   const [attendance, setAttendance] = useState<StaffAttendance[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("malumotlar")
+  const [canManageTasks, setCanManageTasks] = useState(false)
+  const [isOwnProfile, setIsOwnProfile] = useState(false)
 
   const supabase = createClient()
+
+  useEffect(() => {
+    const userStr = localStorage.getItem("user")
+    if (userStr) {
+      const user = JSON.parse(userStr)
+      setCanManageTasks(["admin", "director", "deputy_director"].includes(user.role))
+      if (staff && user.full_name && staff.full_name) {
+        setIsOwnProfile(user.full_name.trim().toLowerCase() === staff.full_name.trim().toLowerCase())
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staff])
+
+  const handleMarkTaskComplete = async (taskId: string) => {
+    await supabase
+      .from("tasks")
+      .update({ status: "completed", completed_at: new Date().toISOString() })
+      .eq("id", taskId)
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: "completed" } : t)))
+  }
 
   useEffect(() => {
     if (params.id) {
@@ -493,6 +515,7 @@ export default function StaffProfilePage() {
                     <TableHead>Holat</TableHead>
                     <TableHead>Muddat</TableHead>
                     <TableHead>Yaratilgan</TableHead>
+                    {(canManageTasks || isOwnProfile) && <TableHead className="text-right">Amallar</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -511,11 +534,24 @@ export default function StaffProfilePage() {
                       </TableCell>
                       <TableCell>{formatShortDate(task.due_date)}</TableCell>
                       <TableCell>{formatShortDate(task.created_at)}</TableCell>
+                      {(canManageTasks || isOwnProfile) && (
+                        <TableCell className="text-right">
+                          {task.status !== "completed" && task.status !== "cancelled" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleMarkTaskComplete(task.id)}
+                            >
+                              Bajarildi deb belgilash
+                            </Button>
+                          )}
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                   {tasks.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                         Topshiriqlar topilmadi
                       </TableCell>
                     </TableRow>
