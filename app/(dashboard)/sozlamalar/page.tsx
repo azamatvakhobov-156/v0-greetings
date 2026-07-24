@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   User,
   Lock,
@@ -9,6 +9,7 @@ import {
   Database,
   Shield,
   Save,
+  Loader2,
 } from "lucide-react"
 import { Header } from "@/components/dashboard/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -24,7 +25,15 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { currentUser } from "@/lib/mock-data"
+import { createClient } from "@/lib/supabase/client"
+
+interface SessionUser {
+  id: string
+  username: string
+  full_name: string
+  role: string
+  phone?: string | null
+}
 
 export default function SozlamalarPage() {
   const [notifications, setNotifications] = useState({
@@ -33,6 +42,72 @@ export default function SozlamalarPage() {
     sms: false,
     weeklyReport: true,
   })
+
+  const [user, setUser] = useState<SessionUser | null>(null)
+  const [profileForm, setProfileForm] = useState({ full_name: "", phone: "" })
+  const [isSavingProfile, setIsSavingProfile] = useState(false)
+
+  const [passwordForm, setPasswordForm] = useState({
+    current: "",
+    next: "",
+    confirm: "",
+  })
+  const [isSavingPassword, setIsSavingPassword] = useState(false)
+  const [passwordMessage, setPasswordMessage] = useState("")
+
+  const supabase = createClient()
+
+  useEffect(() => {
+    const userStr = localStorage.getItem("user")
+    if (userStr) {
+      const parsed = JSON.parse(userStr) as SessionUser
+      setUser(parsed)
+      setProfileForm({ full_name: parsed.full_name, phone: parsed.phone || "" })
+    }
+  }, [])
+
+  const handleSaveProfile = async () => {
+    if (!user) return
+    setIsSavingProfile(true)
+    await supabase
+      .from("users")
+      .update({ full_name: profileForm.full_name, phone: profileForm.phone })
+      .eq("id", user.id)
+    const updatedUser = { ...user, full_name: profileForm.full_name, phone: profileForm.phone }
+    localStorage.setItem("user", JSON.stringify(updatedUser))
+    setUser(updatedUser)
+    setIsSavingProfile(false)
+  }
+
+  const handleChangePassword = async () => {
+    if (!user) return
+    setPasswordMessage("")
+    if (!passwordForm.current || !passwordForm.next || !passwordForm.confirm) {
+      setPasswordMessage("Barcha maydonlarni to'ldiring")
+      return
+    }
+    if (passwordForm.next !== passwordForm.confirm) {
+      setPasswordMessage("Yangi parollar mos kelmadi")
+      return
+    }
+    setIsSavingPassword(true)
+    const { data: existing } = await supabase
+      .from("users")
+      .select("id, password_hash")
+      .eq("id", user.id)
+      .single()
+
+    if (!existing || existing.password_hash !== passwordForm.current) {
+      setPasswordMessage("Joriy parol noto'g'ri")
+      setIsSavingPassword(false)
+      return
+    }
+
+    await supabase.from("users").update({ password_hash: passwordForm.next }).eq("id", user.id)
+    setPasswordMessage("Parol muvaffaqiyatli yangilandi")
+    setPasswordForm({ current: "", next: "", confirm: "" })
+    setIsSavingPassword(false)
+  }
 
   return (
     <>
@@ -67,14 +142,14 @@ export default function SozlamalarPage() {
                 <div className="flex items-center gap-6">
                   <Avatar className="h-20 w-20">
                     <AvatarFallback className="bg-primary/10 text-primary text-xl">
-                      {currentUser.fullName
+                      {(user?.full_name || "?")
                         .split(" ")
                         .map((n) => n[0])
                         .join("")}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" disabled>
                       Rasm yuklash
                     </Button>
                     <p className="text-xs text-muted-foreground mt-2">
@@ -86,24 +161,34 @@ export default function SozlamalarPage() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">To&apos;liq ism</label>
-                    <Input defaultValue={currentUser.fullName} />
+                    <Input
+                      value={profileForm.full_name}
+                      onChange={(e) => setProfileForm((p) => ({ ...p, full_name: e.target.value }))}
+                    />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Email</label>
-                    <Input defaultValue={currentUser.email} type="email" />
+                    <label className="text-sm font-medium">Login</label>
+                    <Input value={user?.username || ""} disabled />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Telefon</label>
-                    <Input defaultValue="+998 90 123 45 67" />
+                    <Input
+                      value={profileForm.phone}
+                      onChange={(e) => setProfileForm((p) => ({ ...p, phone: e.target.value }))}
+                    />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Lavozim</label>
-                    <Input defaultValue="Direktor" disabled />
+                    <Input value={user?.role || ""} disabled />
                   </div>
                 </div>
 
-                <Button>
-                  <Save className="mr-2 h-4 w-4" />
+                <Button onClick={handleSaveProfile} disabled={isSavingProfile}>
+                  {isSavingProfile ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
                   Saqlash
                 </Button>
               </CardContent>
@@ -128,18 +213,36 @@ export default function SozlamalarPage() {
                   <div className="grid gap-4 max-w-md">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Joriy parol</label>
-                      <Input type="password" />
+                      <Input
+                        type="password"
+                        value={passwordForm.current}
+                        onChange={(e) => setPasswordForm((p) => ({ ...p, current: e.target.value }))}
+                      />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Yangi parol</label>
-                      <Input type="password" />
+                      <Input
+                        type="password"
+                        value={passwordForm.next}
+                        onChange={(e) => setPasswordForm((p) => ({ ...p, next: e.target.value }))}
+                      />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Parolni tasdiqlash</label>
-                      <Input type="password" />
+                      <Input
+                        type="password"
+                        value={passwordForm.confirm}
+                        onChange={(e) => setPasswordForm((p) => ({ ...p, confirm: e.target.value }))}
+                      />
                     </div>
                   </div>
-                  <Button>Parolni yangilash</Button>
+                  {passwordMessage && (
+                    <p className="text-sm text-muted-foreground">{passwordMessage}</p>
+                  )}
+                  <Button onClick={handleChangePassword} disabled={isSavingPassword}>
+                    {isSavingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Parolni yangilash
+                  </Button>
                 </div>
 
                 <div className="border-t border-border pt-6">
