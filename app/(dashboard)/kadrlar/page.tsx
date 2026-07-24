@@ -686,16 +686,13 @@ export default function KadrlarPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <Link href="/foydalanuvchilar">
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Xodim qo&apos;shish
+                    </Button>
+                  </Link>
                   <Dialog open={isStaffModalOpen} onOpenChange={setIsStaffModalOpen}>
-                    <DialogTrigger asChild>
-                      <Button onClick={() => {
-                        setEditingStaff(null)
-                        setStaffForm({ full_name: "", position: "", department_id: "", phone: "", hire_date: "", staff_type: "technical", subject_id: "" })
-                      }}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Xodim qo'shish
-                      </Button>
-                    </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
                         <DialogTitle>
