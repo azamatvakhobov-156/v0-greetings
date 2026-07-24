@@ -50,7 +50,7 @@ interface User {
   username: string
   password_hash: string
   full_name: string
-  role: "admin" | "director" | "teacher"
+  role: "admin" | "director" | "deputy_director" | "teacher"
   phone: string | null
   is_active: boolean
   last_login: string | null
@@ -60,12 +60,14 @@ interface User {
 const roleLabels: Record<string, string> = {
   admin: "Administrator",
   director: "Direktor",
+  deputy_director: "Direktor o'rinbosari",
   teacher: "O'qituvchi"
 }
 
 const roleIcons: Record<string, React.ReactNode> = {
   admin: <ShieldCheck className="h-4 w-4" />,
   director: <UserCog className="h-4 w-4" />,
+  deputy_director: <UserCog className="h-4 w-4" />,
   teacher: <GraduationCap className="h-4 w-4" />
 }
 
@@ -85,7 +87,7 @@ export default function UsersPage() {
     username: "",
     password: "",
     full_name: "",
-    role: "teacher" as "admin" | "director" | "teacher",
+    role: "teacher" as "admin" | "director" | "deputy_director" | "teacher",
     phone: "",
     is_active: true
   })
@@ -310,7 +312,7 @@ export default function UsersPage() {
                   <Label htmlFor="role">Lavozim</Label>
                   <Select 
                     value={formData.role} 
-                    onValueChange={(value: "admin" | "director" | "teacher") => 
+                    onValueChange={(value: "admin" | "director" | "deputy_director" | "teacher") => 
                       setFormData({ ...formData, role: value })
                     }
                   >
@@ -320,6 +322,7 @@ export default function UsersPage() {
                     <SelectContent>
                       <SelectItem value="admin">Administrator</SelectItem>
                       <SelectItem value="director">Direktor</SelectItem>
+                      <SelectItem value="deputy_director">Direktor o&apos;rinbosari</SelectItem>
                       <SelectItem value="teacher">O&apos;qituvchi</SelectItem>
                     </SelectContent>
                   </Select>
