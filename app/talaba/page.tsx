@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import {
-  GraduationCap,
   LogOut,
   FileQuestion,
   CheckCircle2,
@@ -149,9 +148,7 @@ export default function StudentPortalPage() {
       <header className="border-b border-border">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-              <GraduationCap className="h-6 w-6 text-primary-foreground" />
-            </div>
+            <img src="/school-logo.png" alt="156-maktab" className="h-10 w-10 rounded-full object-contain" />
             <div>
               <p className="font-semibold">{student?.full_name}</p>
               <p className="text-xs text-muted-foreground">O&apos;quvchi paneli</p>
