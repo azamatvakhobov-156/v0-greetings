@@ -13,7 +13,6 @@ import {
   FileText,
   Settings,
   LogOut,
-  GraduationCap,
   UserCog,
 } from "lucide-react"
 
@@ -129,9 +128,7 @@ export function AppSidebar() {
     <Sidebar className="border-r border-sidebar-border">
       <SidebarHeader className="p-4">
         <Link href="/" className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-            <GraduationCap className="h-6 w-6 text-primary-foreground" />
-          </div>
+          <img src="/school-logo.png" alt="156-maktab" className="h-10 w-10 rounded-full object-contain" />
           <div className="flex flex-col">
             <span className="text-base font-semibold text-sidebar-foreground">
               156-maktab
