@@ -274,18 +274,38 @@ export default function ManaviyatPage() {
 
   const [isGeneratingReport, setIsGeneratingReport] = useState(false)
 
-  const urlToDataUri = async (url: string): Promise<string> => {
+  const urlToDataUri = async (url: string): Promise<string | null> => {
     try {
       const res = await fetch(url)
+      if (!res.ok) return null
       const blob = await res.blob()
-      return await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onloadend = () => resolve(reader.result as string)
-        reader.onerror = reject
-        reader.readAsDataURL(blob)
-      })
+      const objectUrl = URL.createObjectURL(blob)
+      try {
+        const dataUri = await new Promise<string>((resolve, reject) => {
+          const img = new Image()
+          img.onload = () => {
+            const canvas = document.createElement("canvas")
+            canvas.width = img.naturalWidth
+            canvas.height = img.naturalHeight
+            const ctx = canvas.getContext("2d")
+            if (!ctx) {
+              reject(new Error("Canvas konteksti topilmadi"))
+              return
+            }
+            ctx.fillStyle = "#ffffff"
+            ctx.fillRect(0, 0, canvas.width, canvas.height)
+            ctx.drawImage(img, 0, 0)
+            resolve(canvas.toDataURL("image/jpeg", 0.85))
+          }
+          img.onerror = () => reject(new Error("Rasm yuklanmadi"))
+          img.src = objectUrl
+        })
+        return dataUri
+      } finally {
+        URL.revokeObjectURL(objectUrl)
+      }
     } catch {
-      return url
+      return null
     }
   }
 
@@ -355,12 +375,14 @@ export default function ManaviyatPage() {
 
       for (const photoUrl of event.photos) {
         const dataUri = await urlToDataUri(photoUrl)
-        const format_ = dataUri.startsWith("data:image/png") ? "PNG" : "JPEG"
-        if (dataUri.startsWith("data:image")) {
+        if (dataUri) {
           ensureSpace(65)
           try {
-            doc.addImage(dataUri, format_, margin, y, 70, 52)
-            y += 58
+            const props = doc.getImageProperties(dataUri)
+            const imgWidth = 70
+            const imgHeight = Math.min(52, (props.height / props.width) * imgWidth)
+            doc.addImage(dataUri, "JPEG", margin, y, imgWidth, imgHeight)
+            y += imgHeight + 6
           } catch {
             // rasm PDF'ga qo'shilmadi, o'tkazib yuboramiz
           }
