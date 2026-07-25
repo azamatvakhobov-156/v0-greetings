@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
-import { GraduationCap, Loader2, LogIn } from "lucide-react"
+import { Loader2, LogIn } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 
 export default function StudentLoginPage() {
@@ -68,9 +68,7 @@ export default function StudentLoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-3">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary">
-            <GraduationCap className="h-9 w-9 text-primary-foreground" />
-          </div>
+          <img src="/school-logo.png" alt="156-maktab" className="h-16 w-16 rounded-2xl object-contain" />
           <div className="text-center">
             <h1 className="text-2xl font-bold">156-maktab</h1>
             <p className="text-muted-foreground text-sm">O&apos;quvchilar paneli</p>
