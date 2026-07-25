@@ -57,7 +57,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { createClient } from "@/lib/supabase/client"
 
-type EventType = "meeting" | "competition" | "ceremony" | "training" | "other"
+type EventType = "competition" | "event" | "meeting" | "seminar_training" | "pedagogical_council" | "other"
 type IncidentType = "warning" | "violation" | "achievement" | "note"
 
 interface EventRow {
@@ -88,9 +88,10 @@ interface StudentOption {
 
 const eventTypeConfig: Record<EventType, { label: string; icon: typeof Trophy; color: string }> = {
   competition: { label: "Musobaqa", icon: Trophy, color: "bg-primary/10 text-primary" },
-  ceremony: { label: "Marosim", icon: PartyPopper, color: "bg-chart-2/10 text-chart-2" },
-  training: { label: "Trening", icon: Flag, color: "bg-chart-3/10 text-chart-3" },
+  event: { label: "Tadbir", icon: PartyPopper, color: "bg-chart-2/10 text-chart-2" },
   meeting: { label: "Yig'ilish", icon: Users, color: "bg-chart-5/10 text-chart-5" },
+  seminar_training: { label: "Seminar-trening", icon: Flag, color: "bg-chart-3/10 text-chart-3" },
+  pedagogical_council: { label: "Pedagogik kengash", icon: Users, color: "bg-chart-4/10 text-chart-4" },
   other: { label: "Boshqa", icon: Calendar, color: "bg-muted text-muted-foreground" },
 }
 
