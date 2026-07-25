@@ -272,56 +272,115 @@ export default function ManaviyatPage() {
     ? events
     : events.filter((e) => e.created_by === currentUser?.id)
 
-  const handleDownloadReport = () => {
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false)
+
+  const urlToDataUri = async (url: string): Promise<string> => {
+    try {
+      const res = await fetch(url)
+      const blob = await res.blob()
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onloadend = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+    } catch {
+      return url
+    }
+  }
+
+  const handleDownloadReport = async () => {
+    setIsGeneratingReport(true)
+
+    const { jsPDF } = await import("jspdf")
+    const doc = new jsPDF()
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const margin = 15
+    const maxWidth = pageWidth - margin * 2
+    let y = 20
+
     const title = canSeeAllReports
       ? "Barcha o'tkazilgan tadbirlar hisoboti"
       : `${currentUser?.full_name || ""} tomonidan o'tkazilgan tadbirlar hisoboti`
 
-    const rows = reportEvents
-      .map((e) => {
-        const photosHtml = e.photos
-          .map((url) => `<img src="${url}" style="width:200px;margin:4px;border-radius:8px;" />`)
-          .join("")
-        return `
-          <div style="margin-bottom:24px;padding:16px;border:1px solid #ddd;border-radius:8px;">
-            <h3 style="margin:0 0 8px;">${e.title}</h3>
-            <p style="color:#555;margin:0 0 4px;">Sana: ${format(new Date(e.start_date), "d MMMM yyyy", { locale: uz })}</p>
-            <p style="color:#555;margin:0 0 4px;">Turi: ${eventTypeConfig[e.event_type].label}</p>
-            ${e.location ? `<p style="color:#555;margin:0 0 4px;">Joyi: ${e.location}</p>` : ""}
-            ${canSeeAllReports ? `<p style="color:#555;margin:0 0 4px;">Tashkilotchi: ${e.organizerName || "Noma'lum"}</p>` : ""}
-            <p style="margin:8px 0;">${e.description || ""}</p>
-            <div style="display:flex;flex-wrap:wrap;">${photosHtml}</div>
-          </div>
-        `
-      })
-      .join("")
+    const ensureSpace = (needed: number) => {
+      if (y + needed > pageHeight - margin) {
+        doc.addPage()
+        y = 20
+      }
+    }
 
-    const html = `
-      <!DOCTYPE html>
-      <html lang="uz">
-      <head>
-        <meta charset="UTF-8" />
-        <title>${title}</title>
-      </head>
-      <body style="font-family:sans-serif;max-width:800px;margin:40px auto;">
-        <h1>${title}</h1>
-        <p style="color:#777;">Yaratilgan sana: ${format(new Date(), "d MMMM yyyy", { locale: uz })}</p>
-        <p style="color:#777;">Jami tadbirlar soni: ${reportEvents.length}</p>
-        <hr style="margin:24px 0;" />
-        ${rows || "<p>Tadbirlar topilmadi</p>"}
-      </body>
-      </html>
-    `
+    doc.setFontSize(16)
+    doc.text(title, margin, y)
+    y += 8
+    doc.setFontSize(10)
+    doc.setTextColor(120)
+    doc.text(`Yaratilgan sana: ${format(new Date(), "d MMMM yyyy", { locale: uz })}`, margin, y)
+    y += 6
+    doc.text(`Jami tadbirlar soni: ${reportEvents.length}`, margin, y)
+    y += 10
+    doc.setTextColor(0)
 
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `manaviyat-hisobot-${format(new Date(), "yyyy-MM-dd")}.html`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    for (const event of reportEvents) {
+      ensureSpace(30)
+      doc.setFontSize(13)
+      doc.text(event.title, margin, y)
+      y += 7
+
+      doc.setFontSize(10)
+      doc.setTextColor(90)
+      doc.text(
+        `Sana: ${format(new Date(event.start_date), "d MMMM yyyy", { locale: uz })}   Turi: ${eventTypeConfig[event.event_type].label}`,
+        margin,
+        y
+      )
+      y += 6
+      if (event.location) {
+        doc.text(`Joyi: ${event.location}`, margin, y)
+        y += 6
+      }
+      if (canSeeAllReports && event.organizerName) {
+        doc.text(`Tashkilotchi: ${event.organizerName}`, margin, y)
+        y += 6
+      }
+      doc.setTextColor(0)
+
+      if (event.description) {
+        const lines = doc.splitTextToSize(event.description, maxWidth)
+        ensureSpace(lines.length * 5)
+        doc.text(lines, margin, y)
+        y += lines.length * 5 + 3
+      }
+
+      for (const photoUrl of event.photos) {
+        const dataUri = await urlToDataUri(photoUrl)
+        const format_ = dataUri.startsWith("data:image/png") ? "PNG" : "JPEG"
+        if (dataUri.startsWith("data:image")) {
+          ensureSpace(65)
+          try {
+            doc.addImage(dataUri, format_, margin, y, 70, 52)
+            y += 58
+          } catch {
+            // rasm PDF'ga qo'shilmadi, o'tkazib yuboramiz
+          }
+        }
+      }
+
+      y += 6
+      doc.setDrawColor(220)
+      doc.line(margin, y, pageWidth - margin, y)
+      y += 8
+    }
+
+    if (reportEvents.length === 0) {
+      doc.setFontSize(11)
+      doc.setTextColor(120)
+      doc.text("Tadbirlar topilmadi", margin, y)
+    }
+
+    doc.save(`manaviyat-hisobot-${format(new Date(), "yyyy-MM-dd")}.pdf`)
+    setIsGeneratingReport(false)
   }
 
   const handleSaveDiscipline = async () => {
@@ -648,9 +707,16 @@ export default function ManaviyatPage() {
                         : "Siz tomonidan kiritilgan tadbirlar ro'yxati"}
                     </p>
                   </div>
-                  <Button onClick={handleDownloadReport} disabled={reportEvents.length === 0}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Hisobotni yuklab olish
+                  <Button
+                    onClick={() => handleDownloadReport()}
+                    disabled={reportEvents.length === 0 || isGeneratingReport}
+                  >
+                    {isGeneratingReport ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="mr-2 h-4 w-4" />
+                    )}
+                    {isGeneratingReport ? "PDF tayyorlanmoqda..." : "Hisobotni yuklab olish"}
                   </Button>
                 </div>
               </CardHeader>
