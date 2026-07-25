@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
-import { GraduationCap, Loader2, Eye, EyeOff, LogIn } from "lucide-react"
+import { Loader2, Eye, EyeOff, LogIn } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 
 export default function LoginPage() {
@@ -93,9 +93,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
-          <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-4">
-            <GraduationCap className="w-8 h-8 text-primary-foreground" />
-          </div>
+          <img src="/school-logo.png" alt="156-maktab" className="w-16 h-16 rounded-2xl object-contain mb-4" />
           <h1 className="text-2xl font-bold text-foreground">156-maktab</h1>
           <p className="text-muted-foreground text-sm mt-1">Boshqaruv tizimi</p>
         </div>
