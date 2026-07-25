@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useSidebar } from "@/components/ui/sidebar"
+import { useTheme } from "next-themes"
 import { createClient } from "@/lib/supabase/client"
 
 interface SessionUser {
@@ -58,6 +59,7 @@ export default function SozlamalarPage() {
 
   const supabase = createClient()
   const { state: sidebarState, toggleSidebar } = useSidebar()
+  const { theme, setTheme } = useTheme()
 
   useEffect(() => {
     const userStr = localStorage.getItem("user")
@@ -364,16 +366,18 @@ export default function SozlamalarPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Mavzu</label>
-                    <Select value="dark" disabled>
+                    <Select value={theme} onValueChange={setTheme}>
                       <SelectTrigger className="w-[200px]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="dark">Qorong&apos;u</SelectItem>
+                        <SelectItem value="light">Yorug&apos;</SelectItem>
+                        <SelectItem value="system">Tizim</SelectItem>
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      Hozircha tizim faqat qorong&apos;u mavzuda ishlaydi. Boshqa mavzular tez orada qo&apos;shiladi.
+                      Interfeys ko&apos;rinishini tanlang. O&apos;zgarish darhol qo&apos;llaniladi.
                     </p>
                   </div>
 
